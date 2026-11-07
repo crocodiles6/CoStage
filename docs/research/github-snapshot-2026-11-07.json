@@ -1,0 +1,595 @@
+{
+  "observed_date": "2026-11-07",
+  "timezone": "Asia/Shanghai",
+  "method": "GitHub repository metadata and latest three release records. Stars are point-in-time cumulative counts. pushed_at is repository push activity, not a stable-release or code-quality measure.",
+  "repositories": [
+    {
+      "repo": "langgenius/dify",
+      "html_url": "https://github.com/langgenius/dify",
+      "stars": 160553,
+      "pushed_at": "2026-11-06T15:02:57Z",
+      "created_at": "2023-04-12T07:40:24Z",
+      "archived": false,
+      "license_api": "NOASSERTION",
+      "default_branch": "main",
+      "description": "Build Agentic workflows, RAG pipelines, with rich AI model and tool support on one collaborative workspace. Deploy on cloud, VPC, or self-hosted, so teams move from prototype to production without rebuilding the stack.",
+      "metadata_source": "https://api.github.com/repos/langgenius/dify",
+      "recent_release_candidates": [
+        {
+          "tag": "1.19.0",
+          "published_at": "2026-11-04T07:36:16Z",
+          "prerelease": false,
+          "url": "https://github.com/langgenius/dify/releases/tag/1.19.0"
+        },
+        {
+          "tag": "1.18.0",
+          "published_at": "2026-10-23T06:33:50Z",
+          "prerelease": false,
+          "url": "https://github.com/langgenius/dify/releases/tag/1.18.0"
+        },
+        {
+          "tag": "1.17.1",
+          "published_at": "2026-09-10T10:04:06Z",
+          "prerelease": false,
+          "url": "https://github.com/langgenius/dify/releases/tag/1.17.1"
+        }
+      ]
+    },
+    {
+      "repo": "n8n-io/n8n",
+      "html_url": "https://github.com/n8n-io/n8n",
+      "stars": 209696,
+      "pushed_at": "2026-11-06T15:56:18Z",
+      "created_at": "2019-06-22T09:24:21Z",
+      "archived": false,
+      "license_api": "NOASSERTION",
+      "default_branch": "master",
+      "description": "Fair-code workflow automation platform with native AI capabilities. Combine visual building with custom code, self-host or cloud, 400+ integrations.",
+      "metadata_source": "https://api.github.com/repos/n8n-io/n8n"
+    },
+    {
+      "repo": "langflow-ai/langflow",
+      "html_url": "https://github.com/langflow-ai/langflow",
+      "stars": 156390,
+      "pushed_at": "2026-11-06T15:29:29Z",
+      "created_at": "2023-02-08T22:28:03Z",
+      "archived": false,
+      "license_api": "MIT",
+      "default_branch": "main",
+      "description": "Langflow is a powerful tool for building and deploying AI-powered agents and workflows.",
+      "metadata_source": "https://api.github.com/repos/langflow-ai/langflow",
+      "recent_release_candidates": [
+        {
+          "tag": "v1.12.10",
+          "published_at": "2026-11-05T23:32:43Z",
+          "prerelease": false,
+          "url": "https://github.com/langflow-ai/langflow/releases/tag/v1.12.10"
+        },
+        {
+          "tag": "v1.13.1",
+          "published_at": "2026-11-04T03:14:15Z",
+          "prerelease": false,
+          "url": "https://github.com/langflow-ai/langflow/releases/tag/v1.13.1"
+        },
+        {
+          "tag": "v1.12.9",
+          "published_at": "2026-11-04T01:39:07Z",
+          "prerelease": false,
+          "url": "https://github.com/langflow-ai/langflow/releases/tag/v1.12.9"
+        }
+      ]
+    },
+    {
+      "repo": "FlowiseAI/Flowise",
+      "html_url": "https://github.com/FlowiseAI/Flowise",
+      "stars": 55558,
+      "pushed_at": "2026-08-13T12:38:19Z",
+      "created_at": "2023-03-31T12:23:09Z",
+      "archived": true,
+      "license_api": "NOASSERTION",
+      "default_branch": "main",
+      "description": "Build AI Agents, Visually",
+      "metadata_source": "https://api.github.com/repos/FlowiseAI/Flowise"
+    },
+    {
+      "repo": "open-webui/open-webui",
+      "html_url": "https://github.com/open-webui/open-webui",
+      "stars": 157924,
+      "pushed_at": "2026-11-06T16:04:58Z",
+      "created_at": "2023-10-06T22:08:27Z",
+      "archived": false,
+      "license_api": "NOASSERTION",
+      "default_branch": "main",
+      "description": "User-friendly AI Interface (Supports Ollama, OpenAI API, ...)",
+      "metadata_source": "https://api.github.com/repos/open-webui/open-webui"
+    },
+    {
+      "repo": "SillyTavern/SillyTavern",
+      "html_url": "https://github.com/SillyTavern/SillyTavern",
+      "stars": 35342,
+      "pushed_at": "2026-10-02T22:05:54Z",
+      "created_at": "2023-02-09T10:19:24Z",
+      "archived": false,
+      "license_api": "AGPL-3.0",
+      "default_branch": "release",
+      "description": "LLM Frontend for Power Users.",
+      "metadata_source": "https://api.github.com/repos/SillyTavern/SillyTavern"
+    },
+    {
+      "repo": "AstrBotDevs/AstrBot",
+      "html_url": "https://github.com/AstrBotDevs/AstrBot",
+      "stars": 46243,
+      "pushed_at": "2026-11-05T09:21:36Z",
+      "created_at": "2022-12-08T13:27:46Z",
+      "archived": false,
+      "license_api": "AGPL-3.0",
+      "default_branch": "master",
+      "description": "AI Agent Assistant & development framework that integrates lots of IM platforms, LLMs, plugins and AI feature, and can be your openclaw alternative. ✨",
+      "metadata_source": "https://api.github.com/repos/AstrBotDevs/AstrBot"
+    },
+    {
+      "repo": "openclaw/openclaw",
+      "html_url": "https://github.com/openclaw/openclaw",
+      "stars": 394042,
+      "pushed_at": "2026-11-06T16:07:09Z",
+      "created_at": "2025-11-24T10:16:47Z",
+      "archived": false,
+      "license_api": "MIT",
+      "default_branch": "main",
+      "description": "The AI that really does things. Any OS. Any Platform. The lobster way. 🦞 ",
+      "metadata_source": "https://api.github.com/repos/openclaw/openclaw",
+      "recent_release_candidates": [
+        {
+          "tag": "v2026.11.1",
+          "published_at": "2026-11-05T09:48:37Z",
+          "prerelease": false,
+          "url": "https://github.com/openclaw/openclaw/releases/tag/v2026.11.1"
+        },
+        {
+          "tag": "v2026.11.5-beta.1",
+          "published_at": "2026-11-04T04:51:56Z",
+          "prerelease": true,
+          "url": "https://github.com/openclaw/openclaw/releases/tag/v2026.11.5-beta.1"
+        },
+        {
+          "tag": "v2026.10.10",
+          "published_at": "2026-11-03T03:22:35Z",
+          "prerelease": false,
+          "url": "https://github.com/openclaw/openclaw/releases/tag/v2026.10.10"
+        }
+      ]
+    },
+    {
+      "repo": "NousResearch/hermes-agent",
+      "html_url": "https://github.com/NousResearch/hermes-agent",
+      "stars": 261098,
+      "pushed_at": "2026-11-06T16:07:23Z",
+      "created_at": "2025-07-22T22:22:28Z",
+      "archived": false,
+      "license_api": "MIT",
+      "default_branch": "main",
+      "description": "The agent that grows with you",
+      "metadata_source": "https://api.github.com/repos/NousResearch/hermes-agent",
+      "recent_release_candidates": [
+        {
+          "tag": "v0.23.0",
+          "published_at": "2026-11-05T21:32:33Z",
+          "prerelease": false,
+          "url": "https://github.com/NousResearch/hermes-agent/releases/tag/v0.23.0"
+        },
+        {
+          "tag": "v0.22.7",
+          "published_at": "2026-11-03T21:53:16Z",
+          "prerelease": false,
+          "url": "https://github.com/NousResearch/hermes-agent/releases/tag/v0.22.7"
+        },
+        {
+          "tag": "v0.22.6",
+          "published_at": "2026-11-02T17:18:36Z",
+          "prerelease": false,
+          "url": "https://github.com/NousResearch/hermes-agent/releases/tag/v0.22.6"
+        }
+      ]
+    },
+    {
+      "repo": "langchain-ai/langchain",
+      "html_url": "https://github.com/langchain-ai/langchain",
+      "stars": 149124,
+      "pushed_at": "2026-11-06T08:46:54Z",
+      "created_at": "2022-10-17T02:58:36Z",
+      "archived": false,
+      "license_api": "MIT",
+      "default_branch": "master",
+      "description": "The agent engineering platform.",
+      "metadata_source": "https://api.github.com/repos/langchain-ai/langchain"
+    },
+    {
+      "repo": "langchain-ai/langgraph",
+      "html_url": "https://github.com/langchain-ai/langgraph",
+      "stars": 44566,
+      "pushed_at": "2026-11-06T15:35:22Z",
+      "created_at": "2023-08-09T18:33:12Z",
+      "archived": false,
+      "license_api": "MIT",
+      "default_branch": "main",
+      "description": "Build resilient agents.",
+      "metadata_source": "https://api.github.com/repos/langchain-ai/langgraph",
+      "recent_release_candidates": [
+        {
+          "tag": "sdk==0.4.14",
+          "published_at": "2026-11-06T03:03:34Z",
+          "prerelease": false,
+          "url": "https://github.com/langchain-ai/langgraph/releases/tag/sdk%3D%3D0.4.14"
+        },
+        {
+          "tag": "cli==0.4.42",
+          "published_at": "2026-11-06T03:04:13Z",
+          "prerelease": false,
+          "url": "https://github.com/langchain-ai/langgraph/releases/tag/cli%3D%3D0.4.42"
+        },
+        {
+          "tag": "1.2.20",
+          "published_at": "2026-11-05T02:20:53Z",
+          "prerelease": false,
+          "url": "https://github.com/langchain-ai/langgraph/releases/tag/1.2.20"
+        }
+      ]
+    },
+    {
+      "repo": "microsoft/autogen",
+      "html_url": "https://github.com/microsoft/autogen",
+      "stars": 61732,
+      "pushed_at": "2026-10-28T14:45:27Z",
+      "created_at": "2023-08-18T11:43:45Z",
+      "archived": false,
+      "license_api": "CC-BY-4.0",
+      "default_branch": "main",
+      "description": "A programming framework for agentic AI",
+      "metadata_source": "https://api.github.com/repos/microsoft/autogen"
+    },
+    {
+      "repo": "microsoft/agent-framework",
+      "html_url": "https://github.com/microsoft/agent-framework",
+      "stars": 14562,
+      "pushed_at": "2026-11-06T16:06:09Z",
+      "created_at": "2025-04-28T19:40:42Z",
+      "archived": false,
+      "license_api": "MIT",
+      "default_branch": "main",
+      "description": "A framework for building, orchestrating and deploying AI agents and multi-agent workflows with support for Python and .NET.",
+      "metadata_source": "https://api.github.com/repos/microsoft/agent-framework",
+      "recent_release_candidates": [
+        {
+          "tag": "python-1.24.0",
+          "published_at": "2026-10-30T21:52:13Z",
+          "prerelease": false,
+          "url": "https://github.com/microsoft/agent-framework/releases/tag/python-1.24.0"
+        },
+        {
+          "tag": "dotnet-1.27.0",
+          "published_at": "2026-10-30T18:55:48Z",
+          "prerelease": false,
+          "url": "https://github.com/microsoft/agent-framework/releases/tag/dotnet-1.27.0"
+        },
+        {
+          "tag": "dotnet-1.26.0",
+          "published_at": "2026-10-23T14:32:13Z",
+          "prerelease": false,
+          "url": "https://github.com/microsoft/agent-framework/releases/tag/dotnet-1.26.0"
+        }
+      ]
+    },
+    {
+      "repo": "crewAIInc/crewAI",
+      "html_url": "https://github.com/crewAIInc/crewAI",
+      "stars": 60571,
+      "pushed_at": "2026-11-06T15:35:57Z",
+      "created_at": "2023-10-27T03:26:59Z",
+      "archived": false,
+      "license_api": "MIT",
+      "default_branch": "main",
+      "description": "Framework for orchestrating role-playing, autonomous AI agents. By fostering collaborative intelligence, CrewAI empowers agents to work together seamlessly, tackling complex tasks.",
+      "metadata_source": "https://api.github.com/repos/crewAIInc/crewAI",
+      "recent_release_candidates": [
+        {
+          "tag": "1.15.36",
+          "published_at": "2026-11-06T04:40:02Z",
+          "prerelease": false,
+          "url": "https://github.com/crewAIInc/crewAI/releases/tag/1.15.36"
+        },
+        {
+          "tag": "1.15.35",
+          "published_at": "2026-11-03T18:25:15Z",
+          "prerelease": false,
+          "url": "https://github.com/crewAIInc/crewAI/releases/tag/1.15.35"
+        },
+        {
+          "tag": "1.15.34",
+          "published_at": "2026-11-01T21:21:56Z",
+          "prerelease": false,
+          "url": "https://github.com/crewAIInc/crewAI/releases/tag/1.15.34"
+        }
+      ]
+    },
+    {
+      "repo": "agno-agi/agno",
+      "html_url": "https://github.com/agno-agi/agno",
+      "stars": 43082,
+      "pushed_at": "2026-11-06T14:01:01Z",
+      "created_at": "2022-05-04T15:23:02Z",
+      "archived": false,
+      "license_api": "Apache-2.0",
+      "default_branch": "main",
+      "description": "The self-driving agent platform",
+      "metadata_source": "https://api.github.com/repos/agno-agi/agno",
+      "recent_release_candidates": [
+        {
+          "tag": "v3.1.12",
+          "published_at": "2026-10-29T14:00:55Z",
+          "prerelease": false,
+          "url": "https://github.com/agno-agi/agno/releases/tag/v3.1.12"
+        },
+        {
+          "tag": "v3.1.11",
+          "published_at": "2026-10-27T19:28:44Z",
+          "prerelease": false,
+          "url": "https://github.com/agno-agi/agno/releases/tag/v3.1.11"
+        },
+        {
+          "tag": "v3.1.10",
+          "published_at": "2026-10-23T13:10:30Z",
+          "prerelease": false,
+          "url": "https://github.com/agno-agi/agno/releases/tag/v3.1.10"
+        }
+      ]
+    },
+    {
+      "repo": "mastra-ai/mastra",
+      "html_url": "https://github.com/mastra-ai/mastra",
+      "stars": 29382,
+      "pushed_at": "2026-11-06T16:05:13Z",
+      "created_at": "2024-08-06T20:44:31Z",
+      "archived": false,
+      "license_api": "NOASSERTION",
+      "default_branch": "main",
+      "description": "Mastra is the modern TypeScript framework for AI-powered applications and agents.",
+      "metadata_source": "https://api.github.com/repos/mastra-ai/mastra",
+      "recent_release_candidates": [
+        {
+          "tag": "@mastra/core@1.82.0",
+          "published_at": "2026-11-04T10:59:56Z",
+          "prerelease": false,
+          "url": "https://github.com/mastra-ai/mastra/releases/tag/%40mastra/core%401.82.0"
+        },
+        {
+          "tag": "@mastra/core@1.81.0",
+          "published_at": "2026-11-02T12:33:26Z",
+          "prerelease": false,
+          "url": "https://github.com/mastra-ai/mastra/releases/tag/%40mastra/core%401.81.0"
+        },
+        {
+          "tag": "@mastra/core@1.80.0",
+          "published_at": "2026-10-28T15:23:57Z",
+          "prerelease": false,
+          "url": "https://github.com/mastra-ai/mastra/releases/tag/%40mastra/core%401.80.0"
+        }
+      ]
+    },
+    {
+      "repo": "google/adk-python",
+      "html_url": "https://github.com/google/adk-python",
+      "stars": 22125,
+      "pushed_at": "2026-11-06T11:10:16Z",
+      "created_at": "2025-04-01T20:44:40Z",
+      "archived": false,
+      "license_api": "Apache-2.0",
+      "default_branch": "main",
+      "description": "An open-source, code-first Python toolkit for building, evaluating, and deploying sophisticated AI agents with flexibility and control.",
+      "metadata_source": "https://api.github.com/repos/google/adk-python"
+    },
+    {
+      "repo": "pydantic/pydantic-ai",
+      "html_url": "https://github.com/pydantic/pydantic-ai",
+      "stars": 21057,
+      "pushed_at": "2026-11-06T16:04:51Z",
+      "created_at": "2024-06-21T15:55:04Z",
+      "archived": false,
+      "license_api": "MIT",
+      "default_branch": "main",
+      "description": "How Python does AI. Agents, realtime voice, image generation, embeddings. Every model, every interface, typed end to end.",
+      "metadata_source": "https://api.github.com/repos/pydantic/pydantic-ai"
+    },
+    {
+      "repo": "openai/openai-agents-python",
+      "html_url": "https://github.com/openai/openai-agents-python",
+      "stars": 30530,
+      "pushed_at": "2026-11-06T09:06:14Z",
+      "created_at": "2025-03-11T03:42:36Z",
+      "archived": false,
+      "license_api": "MIT",
+      "default_branch": "main",
+      "description": "A lightweight, powerful framework for multi-agent workflows",
+      "metadata_source": "https://api.github.com/repos/openai/openai-agents-python"
+    },
+    {
+      "repo": "agentscope-ai/agentscope",
+      "html_url": "https://github.com/agentscope-ai/agentscope",
+      "stars": 35506,
+      "pushed_at": "2026-11-04T10:09:19Z",
+      "created_at": "2024-01-12T03:41:59Z",
+      "archived": false,
+      "license_api": "Apache-2.0",
+      "default_branch": "main",
+      "description": "Build and run agents you can see, understand and trust.",
+      "metadata_source": "https://api.github.com/repos/agentscope-ai/agentscope",
+      "recent_release_candidates": [
+        {
+          "tag": "v2.0.11",
+          "published_at": "2026-10-27T02:54:04Z",
+          "prerelease": false,
+          "url": "https://github.com/agentscope-ai/agentscope/releases/tag/v2.0.11"
+        },
+        {
+          "tag": "v2.0.10",
+          "published_at": "2026-10-12T08:15:09Z",
+          "prerelease": false,
+          "url": "https://github.com/agentscope-ai/agentscope/releases/tag/v2.0.10"
+        },
+        {
+          "tag": "v2.0.9",
+          "published_at": "2026-09-28T05:06:20Z",
+          "prerelease": false,
+          "url": "https://github.com/agentscope-ai/agentscope/releases/tag/v2.0.9"
+        }
+      ]
+    },
+    {
+      "repo": "langchain-ai/deepagents",
+      "html_url": "https://github.com/langchain-ai/deepagents",
+      "stars": 31038,
+      "pushed_at": "2026-11-06T15:51:10Z",
+      "created_at": "2025-07-27T23:07:53Z",
+      "archived": false,
+      "license_api": "MIT",
+      "default_branch": "main",
+      "description": "The batteries-included agent harness.",
+      "metadata_source": "https://api.github.com/repos/langchain-ai/deepagents",
+      "recent_release_candidates": [
+        {
+          "tag": "deepagents==0.7.34",
+          "published_at": "2026-11-05T21:15:33Z",
+          "prerelease": false,
+          "url": "https://github.com/langchain-ai/deepagents/releases/tag/deepagents%3D%3D0.7.34"
+        },
+        {
+          "tag": "deepagents==0.7.33",
+          "published_at": "2026-11-05T20:40:31Z",
+          "prerelease": false,
+          "url": "https://github.com/langchain-ai/deepagents/releases/tag/deepagents%3D%3D0.7.33"
+        },
+        {
+          "tag": "deepagents-code==0.2.5",
+          "published_at": "2026-11-05T21:41:43Z",
+          "prerelease": false,
+          "url": "https://github.com/langchain-ai/deepagents/releases/tag/deepagents-code%3D%3D0.2.5"
+        }
+      ]
+    },
+    {
+      "repo": "letta-ai/letta",
+      "html_url": "https://github.com/letta-ai/letta",
+      "stars": 25369,
+      "pushed_at": "2026-10-18T22:28:04Z",
+      "created_at": "2023-10-11T07:38:37Z",
+      "archived": false,
+      "license_api": "Apache-2.0",
+      "default_branch": "main",
+      "description": "Platform for stateful agents: AI with advanced memory that can learn and self-improve over time.",
+      "metadata_source": "https://api.github.com/repos/letta-ai/letta"
+    },
+    {
+      "repo": "mem0ai/mem0",
+      "html_url": "https://github.com/mem0ai/mem0",
+      "stars": 68514,
+      "pushed_at": "2026-11-06T13:43:44Z",
+      "created_at": "2023-06-20T08:58:36Z",
+      "archived": false,
+      "license_api": "Apache-2.0",
+      "default_branch": "main",
+      "description": "The Memory Layer for AI Agents - Drop-in memory infrastructure for AI agents and apps. Context that persists. Built for production.",
+      "metadata_source": "https://api.github.com/repos/mem0ai/mem0"
+    },
+    {
+      "repo": "langfuse/langfuse",
+      "html_url": "https://github.com/langfuse/langfuse",
+      "stars": 37103,
+      "pushed_at": "2026-11-06T16:05:48Z",
+      "created_at": "2023-05-18T17:47:09Z",
+      "archived": false,
+      "license_api": "NOASSERTION",
+      "default_branch": "main",
+      "description": "🪢 Open source agent evals & observability: Trace, evaluate, and improve LLM applications with one open platform.",
+      "metadata_source": "https://api.github.com/repos/langfuse/langfuse",
+      "recent_release_candidates": [
+        {
+          "tag": "v4.76.0",
+          "published_at": "2026-11-05T18:08:03Z",
+          "prerelease": false,
+          "url": "https://github.com/langfuse/langfuse/releases/tag/v4.76.0"
+        },
+        {
+          "tag": "v4.75.0",
+          "published_at": "2026-11-04T09:26:19Z",
+          "prerelease": false,
+          "url": "https://github.com/langfuse/langfuse/releases/tag/v4.75.0"
+        },
+        {
+          "tag": "v4.74.0",
+          "published_at": "2026-11-03T13:49:10Z",
+          "prerelease": false,
+          "url": "https://github.com/langfuse/langfuse/releases/tag/v4.74.0"
+        }
+      ]
+    },
+    {
+      "repo": "BerriAI/litellm",
+      "html_url": "https://github.com/BerriAI/litellm",
+      "stars": 62837,
+      "pushed_at": "2026-11-06T16:00:00Z",
+      "created_at": "2023-07-27T00:09:52Z",
+      "archived": false,
+      "license_api": "NOASSERTION",
+      "default_branch": "main",
+      "description": "The fastest, litest AI Gateway. Rust core with Python SDK. Call 100+ LLM APIs in OpenAI (or native) format with cost tracking, guardrails, load balancing, and logging [Bedrock, Azure, OpenAI, Anthropic, OpenAI, VertexAI, vLLM, Nvidia NIM]",
+      "metadata_source": "https://api.github.com/repos/BerriAI/litellm"
+    },
+    {
+      "repo": "vllm-project/vllm",
+      "html_url": "https://github.com/vllm-project/vllm",
+      "stars": 96465,
+      "pushed_at": "2026-11-06T15:52:24Z",
+      "created_at": "2023-02-09T11:23:20Z",
+      "archived": false,
+      "license_api": "Apache-2.0",
+      "default_branch": "main",
+      "description": "A high-throughput and memory-efficient inference and serving engine for LLMs",
+      "metadata_source": "https://api.github.com/repos/vllm-project/vllm"
+    },
+    {
+      "repo": "ollama/ollama",
+      "html_url": "https://github.com/ollama/ollama",
+      "stars": 186110,
+      "pushed_at": "2026-11-06T14:59:41Z",
+      "created_at": "2023-06-26T19:39:32Z",
+      "archived": false,
+      "license_api": "MIT",
+      "default_branch": "main",
+      "description": "Get up and running with Kimi, GLM, MiniMax, DeepSeek, gpt-oss, Qwen, Gemma and other models.",
+      "metadata_source": "https://api.github.com/repos/ollama/ollama"
+    },
+    {
+      "repo": "LibreChat-AI/LibreChat",
+      "html_url": "https://github.com/LibreChat-AI/LibreChat",
+      "stars": 46804,
+      "pushed_at": "2026-11-06T16:06:25Z",
+      "created_at": "2023-02-12T01:06:52Z",
+      "archived": false,
+      "license_api": "MIT",
+      "default_branch": "main",
+      "description": "Enhanced ChatGPT Clone: Features Agents, MCP, Skills, DeepSeek, Anthropic, AWS, OpenAI, Responses API, Azure, Groq, o1, GPT-5, Mistral, OpenRouter, Vertex AI, Gemini, Artifacts, AI model switching, message search, Code Interpreter, langchain, DALL-E-3, OpenAPI Actions, Functions, Secure Multi-User Auth, Presets, open-source for self-hosting. Active",
+      "metadata_source": "https://api.github.com/repos/LibreChat-AI/LibreChat"
+    },
+    {
+      "repo": "letta-ai/letta-code",
+      "html_url": "https://github.com/letta-ai/letta-code",
+      "stars": 3793,
+      "pushed_at": "2026-11-06T16:10:01Z",
+      "created_at": "2025-10-25T04:17:51Z",
+      "archived": false,
+      "license_api": "Apache-2.0",
+      "default_branch": "main",
+      "description": "Agents that self-improve with experience",
+      "metadata_source": "https://api.github.com/repos/letta-ai/letta-code"
+    }
+  ]
+}
