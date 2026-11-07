@@ -1,14 +1,14 @@
 # 多 Agent 聊天服务系统设计
 
-设计版本：v3。研究快照日期：2026-11-07，北京时间。已确认采用邀请制、多团队独立空间，以及“自研 Agent 循环和策略，LangGraph 负责持久执行”的架构。本文明确模块职责、状态归属和恢复边界，限定系统设计，不包含实施计划或产品代码。
+设计版本：v4。研究快照日期：2026-11-07，北京时间。服务边界为邀请制、多团队独立空间。本版增加用户本机已有 Codex、Claude Code、dsh 的原生 Agent 接入；自研 Agent 继续使用“自研循环和策略，LangGraph 负责持久执行”。本文限定系统设计，不包含实施计划或产品代码。
 
-**采用模块化单体：自建群聊、任务协调、Agent 循环与策略，复用 LangGraph Functional API 保存阶段结果、暂停和恢复。** 模型接入复用 LiteLLM，观测复用 OpenTelemetry 与 Langfuse。PostgreSQL 分别保存业务事实与框架 checkpoint，对象存储保存发布制品、文件和请求快照；API、Worker 与工具执行器分开运行。
+**采用模块化单体与双运行时路径：模型 API 接入自研 Harness，已有 Agent 通过原生适配器接入。** 自研路径使用 LangGraph Functional API 保存阶段结果与暂停恢复，模型网关复用 LiteLLM；原生路径通过 Local Connector 驱动本机 Codex、Claude Code 或 dsh，由原生运行时管理循环、上下文、记忆和恢复。房间、任务、授权、发布、产物与观测规范由 CoStage 统一管理。
 
-系统支持多人、多 Agent 在同一个房间协作，并能解释每次执行的配置、输入、权限和结果。平台掌握 Agent 的控制逻辑、上下文压缩、记忆管理和事件规范；LangGraph 提供持久执行原语，通过 Runtime Adapter 接入。房间、任务和资源身份不依赖框架内部对象。
+系统让多人、自研 Agent 和本地原生 Agent 在同一个房间协作。平台统一提交任务、接收事件、转交审批和发布结果，按运行时能力展示可配置与可观测范围。原生 Agent 保留其已安装的记忆、Skills、Tools 和 MCP；这些资源仍由原生系统持有，不自动复制到平台，也不默认获得平台级版本锁定和输入可重建能力。
 
 ## 设计目标与边界
 
-已确认的需求包括：Agent 全套配置的版本管理、多模型与本地模型接入、人与 Agent 双向 @、共享上下文和可观测，覆盖角色扮演、剧本杀及辅助办公。已确认的服务边界是邀请制，每个团队拥有独立空间。
+已确认的需求包括：Agent 全套配置的版本管理、多模型与本地模型 API 接入、本地已有 Agent 接入、人与 Agent 双向 @、共享上下文和可观测，覆盖角色扮演、剧本杀及辅助办公。已确认的服务边界是邀请制，每个团队拥有独立空间。
 
 以下是本方案的默认选择：Web 与文本文件优先；空间之间不共享凭据、记忆、任务或 Agent 实例；工具与可执行技能由空间管理员发布；普通成员可以在获准能力范围内创建和调用 Agent。这些选择限制权限扩散，同时保留角色配置和业务协作的自由度。
 
@@ -16,20 +16,20 @@
 | --- | --- |
 | 多人协作 | 同一房间的人能看到一致的已提交消息、任务进展和授权范围内的产物 |
 | Agent 可组合 | A 可以委派 B，独立追踪子任务，失败或取消后仍能解释已完成部分 |
-| 版本可追溯 | 任意模型调用均可定位 AgentRelease、实际配置、输入来源与工具版本 |
+| 版本可追溯 | 自研调用定位完整输入与依赖；原生调用定位绑定、实际可观察配置及能力缺口 |
 | 信息可控共享 | 房间公开材料共享，个人资料、角色秘密和凭据按权限隔离 |
 | 执行可恢复 | 断线、Worker 重启和等待确认不丢任务；未知写入效果有明确处理状态 |
 | 场景可扩展 | 通过场景规则改变发言与状态提交行为，复用相同的身份、消息和任务系统 |
 
 以下情况应判为设计失败：同名 Agent 串用其他房间的记忆；Agent 转交任务后扩大权限；同一消息被重复派发产生重复外部写入；配置升级改变正在执行的任务；观测中缺少实际输入和依赖来源。
 
-LangGraph 提供 checkpoint、阶段结果恢复与 interrupt；Functional API 允许以普通函数和循环表达控制流。本方案仅使用开源运行库与 PostgreSQL checkpointer，长期记忆保存在平台自己的 Memory Service，不使用 LangGraph Store 作为第二份权威记忆。LangSmith 托管服务不属于必选依赖。[Functional API](https://docs.langchain.com/oss/python/langgraph/functional-api)、[持久化](https://docs.langchain.com/oss/python/langgraph/persistence)、[暂停恢复](https://docs.langchain.com/oss/python/langgraph/interrupts)
+LangGraph 提供 checkpoint、阶段结果恢复与 interrupt；Functional API 允许以普通函数和循环表达控制流。自研路径仅使用开源运行库与 PostgreSQL checkpointer，长期记忆保存在平台自己的 Memory Service，不使用 LangGraph Store 作为第二份权威记忆。LangSmith 托管服务不属于必选依赖。[Functional API](https://docs.langchain.com/oss/python/langgraph/functional-api)、[持久化](https://docs.langchain.com/oss/python/langgraph/persistence)、[暂停恢复](https://docs.langchain.com/oss/python/langgraph/interrupts)
 
 本版不设计开放注册、跨空间 Agent 网络、任意用户脚本市场、无限自主讨论或微服务拆分。角色扮演、剧本杀和办公仍共用同一底座；严格剧本模式的秘密隔离与办公场景的副作用恢复都属于架构验收范围。
 
 ## 可行方案与推荐
 
-**已选方案：自建群聊核心和 Agent 循环，由 LangGraph 承担单个 Run 的持久执行。** 自研范围集中在产品要持续优化的行为与策略，恢复机制复用框架。多人房间、权限、版本和跨 Agent 协调仍采用独立业务模型。
+**自研路径保持已选方案：自建群聊核心和 Agent 循环，由 LangGraph 承担单个 managed Run 的持久执行。** 自研范围集中在产品要持续优化的行为与策略，恢复机制复用框架。多人房间、权限、版本和跨 Agent 协调仍采用独立业务模型。
 
 AgentScope 已有 Agent Service、Team、工具和技能管理，可以缩短服务搭建工作。其公开服务文档中的默认身份入口需要替换，按用户组织会话的结构也需要适配多人房间。它保留为替代方案，本版不并行引入两套运行框架。[固定版本 README](https://github.com/agentscope-ai/agentscope/tree/v2.0.11)、[服务架构](https://docs.agentscope.io/en/versions/2.0.12dev/deploy/agent-service)
 
@@ -39,7 +39,7 @@ AgentScope 已有 Agent Service、Team、工具和技能管理，可以缩短服
 | 扩展 AgentScope 服务 | Agent、会话、Team、MCP、Skills 与持久化 | 将框架拥有的会话状态映射到多人房间，补齐发布和业务权限 | 接受其服务模型，并优先减少现成服务的开发量 |
 | **自建群聊核心与循环 + LangGraph 持久执行** | 阶段结果持久化、暂停恢复 | 自己维护房间、循环、策略、授权与发布模型 | **用户已选，保留行为控制权并复用恢复机制** |
 
-技术默认值为 React/TypeScript 前端、Python/FastAPI 后端、自研 Agent Runtime、LangGraph Functional API、PostgreSQL + pgvector、对象存储、LiteLLM 和 OpenTelemetry + Langfuse。Pi、dsh 用作设计参考，不直接复制其 TypeScript 运行栈或整套插件系统；普通模块接口已能承接首版扩展。
+技术默认值为 React/TypeScript 前端、Python/FastAPI 后端、自研 Agent Runtime、LangGraph Functional API、PostgreSQL + pgvector、对象存储、LiteLLM 和 OpenTelemetry + Langfuse。Pi 继续用作自研循环的设计参考；dsh 同时是原生适配目标。原生适配器可作为设备侧独立进程使用其官方 SDK，不要求平台复制运行时源码或更换主服务语言。
 
 | 单 Agent 方案 | 控制权与收益 | 维护代价 | 本版选择 |
 | --- | --- | --- | --- |
@@ -49,9 +49,15 @@ AgentScope 已有 Agent Service、Team、工具和技能管理，可以缩短服
 
 细粒度埋点和自定义压缩两种自研路线都能实现。选用 LangGraph 的依据是减少持久执行机制的维护量，不是将 Agent 行为交给框架。
 
-Pi 将应用消息转换、请求准备与模型消息分开，并提供可定制的压缩边界；dsh 区分持久 Session 事实和实时 Agent 事件，再从事实生成模型视图。本方案借鉴这些边界，保留自己的租户、权限和任务契约。dsh 当前处于 developer preview，不作为本版运行依赖。[Pi Agent Core](https://github.com/earendil-works/pi/tree/main/packages/agent)、[Pi 压缩](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/compaction.md)、[dsh 架构](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md)、[dsh 状态](https://github.com/deepseek-ai/deepseek-harness)
+Pi 将应用消息转换、请求准备与模型消息分开，并提供可定制的压缩边界；dsh 区分持久 Session 事实和实时 Agent 事件，再从事实生成模型视图。本方案借鉴这些边界，保留自己的租户、权限和任务契约。dsh 当前处于 developer preview，本版以可选、固定版本的原生运行时接入，避免作为自研循环的基础依赖。[Pi Agent Core](https://github.com/earendil-works/pi/tree/main/packages/agent)、[Pi 压缩](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/compaction.md)、[dsh 架构](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md)、[dsh 状态](https://github.com/deepseek-ai/deepseek-harness)
 
-同一 Run 只有一套 LangGraph continuation。其他 Harness 若将来接入，必须实现相同的 Runtime 契约；首版不同时维护多套运行时。
+一个 Run 只能选择一个 execution_backend：managed 或 native。managed 的 continuation 属于 LangGraph；native 的执行进度属于原生运行时。不得用可自动重放的 LGStep 包裹整个原生任务，再通过重新发送 prompt 恢复。
+
+| 原生接入方案 | 收益 | 关键代价 | 选择 |
+| --- | --- | --- | --- |
+| 将 CLI 包成普通工具 | 接入简单 | 会话、审批、恢复和原生事件难以准确表达 | 仅适合无状态单次调用，不作为本需求主路径 |
+| **统一任务接口 + 原生适配器 + Local Connector** | 保留原生循环、资源与协议能力，用户电脑无需开放入站端口 | 维护设备生命周期和能力差异，恢复保证按运行时区分 | **推荐，纳入本版设计** |
+| 将原生 Agent 改造成自研循环插件 | 可以尝试统一内部状态 | 需重写或深度修改上游，失去直接复用已有 Agent 的目的 | 不采用 |
 
 ## 场景与产品范围
 
@@ -85,65 +91,42 @@ Pi 将应用消息转换、请求准备与模型消息分开，并提供可定�
 
 空间管理员能管理资源，不默认获得个人密钥明文、私人消息或所有 trace 正文的读取权。平台运维只读运行元数据；查看内容须走独立、可审计的授权。
 
-初始阶段允许空间管理员发布技能和注册工具，普通成员不能直接上传并运行任意程序。代码执行、浏览器等能力仍通过管理员批准的工具进入隔离执行器；是否增加开放脚本平台属于后续独立范围。
+平台托管路径允许空间管理员发布技能和注册工具，普通成员不能直接上传并运行任意程序。代码执行、浏览器等能力仍通过管理员批准的工具进入隔离执行器；是否增加开放脚本平台属于后续独立范围。 用户可以配对自己拥有的本地 Connector 并登记原生 Agent；默认仅本人可调用，允许谁调用、使用哪个本地工作目录和配置范围，均由设备所有者显式授权。
 
 ## 组件关系与状态归属
 
 ```mermaid
 flowchart TB
-    UI["Web 客户端"]
-    subgraph CORE["业务服务"]
-        CHAT["房间与消息"]
-        COORD["Coordinator<br/>Task 与跨 Agent 调度"]
-        REG["发布库与授权规则"]
+    UI["Web 客户端"] --> CORE["房间与 Coordinator<br/>Task 授权 发布 产物"]
+    CORE --> ROUTER["Runtime Router<br/>按绑定与能力选择执行路径"]
+    CORE --> DB[("PostgreSQL<br/>业务状态 账本 事件游标")]
+    subgraph M["managed：平台自研 Harness"]
+        MA["Runtime Adapter"] --> LG["LangGraph<br/>阶段结果与恢复"]
+        LG --> LOOP["自研循环与策略"]
+        LOOP --> CM["Context 与 Memory"]
+        LOOP --> GATE["Model 与 Tool Gateway"]
+        LG --> CP[("LangGraph checkpoint")]
+        CM --> OWN[("平台快照与记忆")]
+        GATE --> API["云端或本地模型 API<br/>批准的工具与 MCP"]
     end
-    subgraph WORK["Worker 执行边界"]
-        ADAPTER["自研 Runtime Adapter<br/>租约校验与等待桥接"]
-        LG["LangGraph Functional API<br/>阶段结果与暂停恢复"]
-        LOOP["自研 Loop Controller<br/>循环与动作策略"]
-        STEP["自研阶段函数 LGStep<br/>输入 模型 工具 委派 提交"]
-        ADAPTER --> LG
-        LG -->|执行 entrypoint| LOOP
-        LOOP -->|确定阶段与顺序| STEP
-        LG -.->|保存与恢复阶段结果| STEP
+    subgraph N["native：用户设备"]
+        CON["Local Connector<br/>设备身份 去重日志 事件补传"] --> NA["Codex / Claude Code / dsh 适配器"]
+        NA --> RT["已安装的原生运行时<br/>自有循环与会话恢复"]
+        RT --> RES["原生记忆 Skills Tools MCP<br/>本地凭据与配置"]
     end
-    CTX["自研 Context 与 Memory<br/>检索 压缩 修订"]
-    MODEL["Model Gateway"]
-    TOOL["Tool Gateway<br/>授权 幂等 对账"]
-    ISO["隔离执行器与 MCP"]
-    DB[("PostgreSQL<br/>业务状态与动作账本")]
-    CP[("PostgreSQL<br/>LangGraph checkpoint")]
-    OBJ[("对象存储<br/>发布包与请求响应")]
-    EXT["云端模型或私网推理"]
-    SYS["获准的外部系统"]
-    OBS["OpenTelemetry 与 Langfuse"]
-
-    UI -->|消息与控制动作| CHAT
-    CHAT --> COORD
-    CHAT -->|事件与补拉| DB
-    CHAT -->|SSE| UI
-    COORD --> REG
-    COORD -->|事务写 RunJob| DB
-    DB -->|领取作业| ADAPTER
-    LG --> CP
-    STEP --> CTX
-    CTX --> DB
-    CTX --> OBJ
-    STEP --> MODEL
-    MODEL --> EXT
-    MODEL -->|请求与响应记录| DB
-    STEP --> TOOL
-    TOOL -->|实时授权| REG
-    TOOL -->|操作账本| DB
-    TOOL --> ISO
-    ISO --> SYS
-    STEP -->|委派与 RunOutcome| COORD
-    ADAPTER -->|等待和恢复事件| COORD
-    STEP -.->|阶段内细粒度事件| OBS
-    ADAPTER -.->|checkpoint 与重放轨迹| OBS
+    ROUTER --> MA
+    ROUTER --> HUB["Connector Gateway<br/>命令投递 审批与事件接收"]
+    CON -->|"主动建立认证 WSS 长连接"| HUB
+    HUB -->|"同连接下发获准任务"| CON
+    HUB --> DB
+    MA --> DB
+    RT -.->|"可选协作工具桥接"| CORE
+    MA -.-> OBS["统一观测<br/>标明采集范围与缺失字段"]
+    HUB -.-> OBS
+    CORE -->|"SSE 可见消息与状态"| UI
 ```
 
-图中框线表示职责，不对应独立微服务。自研循环运行在 LangGraph entrypoint 中，自研阶段函数由 Functional API 调度并保存结果。框架负责持久执行，自研代码决定调用顺序与业务行为；Runtime Adapter 将框架的等待、完成与错误转换为平台契约。API 与 Worker 分进程，工具执行器单独隔离；业务表和 checkpoint 可使用同一个 PostgreSQL 集群的不同 schema。
+图中框线表示职责，不对应独立微服务。Runtime Router 根据 AgentInstance 固定的 RuntimeProfile 选择路径。自研执行位于 Worker；原生执行位于用户设备，Connector 主动向平台建立认证连接，原生协议仅在设备内通过 stdio 或受控本地接口使用。原生模型请求不默认经过 LiteLLM，原生工具调用也不默认经过平台 Tool Gateway。
 
 | 模块 | 权威状态归属 | 职责与边界 |
 | --- | --- | --- |
@@ -157,13 +140,16 @@ flowchart TB
 | Model Gateway | ModelInvocation、供应商请求 attempt、UsageLedger | 适配模型、控制单次请求重试、保存响应与实际用量 |
 | Tool Gateway | ToolInvocation、CredentialBinding、外部回执 | 实时授权、冻结 intent、执行和对账；工具结果未知时阻止依赖动作 |
 | 观测模块 | trace、指标、诊断副本 | 关联业务事件与框架轨迹；观测副本不决定完成、授权或恢复 |
+| Runtime Router / Native Agent Adapter | RuntimeProfileRevision、NativeSessionBinding、CapabilitySnapshot | 选择后端并转换协议，不接管原生循环 |
+| Local Connector | 设备本地命令日志、原生会话映射、未确认事件与执行占用 | 执行授权命令、转发审批、断线对账；本地凭据留在设备 |
+| 原生 Agent | 原生 session、压缩结果、原生记忆与工具执行状态 | 拥有 native Run 的 continuation；平台只保存授权的引用和观测事实 |
 
 ### 核心概念
 
 | 概念 | 含义与生命周期 |
 | --- | --- |
 | AgentDefinition | 可复用的 Agent 身份与配置草稿 |
-| AgentRelease | 固定 Prompt、策略、技能、工具、模型与运行依赖的不可变发布 |
+| AgentRelease | 固定平台配置与执行后端；原生资源同时标记可锁定、仅观测或未知 |
 | AgentInstance | 房间中的实际角色，拥有实例 ID、昵称、角色权限与独立记忆作用域 |
 | Message | 人或 Agent 的交流内容，可引用 Task 和 Artifact，本身不必触发执行 |
 | Task | 一次用户请求或主持轮次，持有授权、总预算、版本集合和根 Run 集合 |
@@ -173,10 +159,15 @@ flowchart TB
 | Attempt | Run 或模型调用的重试尝试，保留替代关系，不覆盖前一次轨迹 |
 | ModelInputSnapshot | 某次模型调用实际收到的完整请求与来源，固定当时已接收的 context delta |
 | Artifact | 文件、结论、代码差异等可修订产物，通过 ACL 决定分享范围 |
+| RuntimeProfileRevision | execution_backend、provider_kind、connector/device、原生 profile、模型与推理强度、能力要求及配置来源 |
+| NativeSessionBinding | 将房间实例与获准原生会话关联；不同安全范围不共享原生会话 |
+| ContextEnvelope | 平台交给原生 Agent 的授权输入包，区别于原生实际发送给模型的完整请求 |
 
-Task 聚合根 Run，每个 Run 通过 task_id 归属请求、通过 parent_run_id 表示委派。一个 Run 对应一个稳定的 LangGraph thread_id；Worker 接管、网络重试和恢复不更换这个绑定。房间、AgentInstance 与 framework thread_id 分属不同层次，框架的 task 在本文统一称为 LGStep。
+Task 聚合根 Run，每个 Run 通过 task_id 归属请求、通过 parent_run_id 表示委派。managed Run 绑定稳定 LangGraph thread_id；native Run 绑定设备、运行时版本、profile、native_session_id，以及本次 command_id 和可取得的 turn/message ID。原生 session 可承接同一安全范围内的后续 Run，但同时只允许一个活动 Run；它不等于房间，也不与 LangGraph thread_id 混用。
 
-## 单 Agent 执行与持久化
+## 自研 Agent 执行与持久化
+
+本节的 LGStep、checkpoint、压缩与恢复规则只适用于 managed 后端。native 后端采用后文的原生会话契约，平台不在它的模型与工具循环中插入 LangGraph。
 
 ### 自研模块决定行为
 
@@ -211,9 +202,9 @@ Context Builder 负责资料检索、权限过滤、记忆读取、排序和输�
 
 ## Agent 版本管理
 
-### 发布包锁定全部运行依赖
+### 发布依赖与原生资源范围
 
-AgentDefinition 保存可复用身份与草稿，AgentRelease 固定一次发布，AgentInstance 表示房间中的角色实例。同一个 AgentRelease 可以被多个实例引用；实例之间的记忆和运行状态互相隔离。实例升级只更新其版本绑定，不修改发布制品。
+AgentDefinition 保存可复用身份与草稿，AgentRelease 固定一次发布，AgentInstance 表示房间中的角色实例。同一个 AgentRelease 可以被多个实例引用；平台记忆和会话按实例隔离。原生个人 profile 的历史记忆可能跨会话共享，采用后文的个人使用模式，不宣称具有同样的隔离保证。实例升级只更新其版本绑定，不修改发布制品。
 
 | 资源 | 发布时保存 | 运行时补充 |
 | --- | --- | --- |
@@ -226,10 +217,11 @@ AgentDefinition 保存可复用身份与草稿，AgentRelease 固定一次发布
 | Model | ModelProfile 版本、允许的模型与路由策略 | 实际 provider、model、endpoint、参数和 usage |
 | Loop Policy | 停止、动作顺序、工具并发、steering 接纳及异常处理策略 | 实际分支决定与动作来源 |
 | Runtime | 自研 Runtime 镜像、LangGraph 与 checkpointer 版本、依赖 lockfile、执行 schema | RuntimeBinding、框架 thread_id、checkpoint 引用 |
+| Native Runtime | 原生程序版本、适配器版本、profile 引用、获准配置来源、能力要求、模型与 effort 覆盖 | 实际程序与协议版本、NativeResourceSnapshot、原生 session/turn、可固定性和漂移记录 |
 
-发布版本锁定 Context 与 Memory 的规则及初始资源；Task 固定本次可调用的 Agent 版本集合；每次模型调用保存实际 ModelInputSnapshot。发布快照、任务约束和模型输入各有独立 ID，查询某条回复时可以逐层关联。
+managed 发布锁定 Context 与 Memory 的规则及初始资源，每次模型调用保存 ModelInputSnapshot。native 发布固定平台覆盖配置及资源引用，另记 NativeResourceSnapshot，区分 pinned、observed 和 unknown；持续变化的原生记忆仅记录可观察的修订或摘要标识，不伪装成不可变发布。Task 固定两类 Agent 的发布集合，运行时记录实际生效配置。
 
-一次 Agent 发布必须完整解析以下依赖；它们共同构成 Release Manifest。
+一次 managed Agent 发布完整解析下列依赖，构成 Release Manifest。native 发布使用同一外壳，Loop、Context、Memory 标为由原生运行时持有，并加入 RuntimeProfileRevision 与资源可固定性报告。
 
 | 发布组成 | 固定内容 |
 | --- | --- |
@@ -240,7 +232,7 @@ AgentDefinition 保存可复用身份与草稿，AgentRelease 固定一次发布
 
 自然语言规则、可执行脚本和授权政策分别保存。技能正文不能覆盖系统授权，模型参数变更不能悄悄替换工具定义。
 
-依赖引用在发布时解析为不可变 revision 和内容 digest；正式发布包不保留 latest。凭据引用独立于密钥内容，权限与凭据有效性在每次使用时重新检查。发布包可回溯历史行为，当前授权仍决定该动作现在能否执行。
+依赖引用在发布时解析为不可变 revision 和内容 digest；正式发布包不保留 latest。凭据引用独立于密钥内容，权限与凭据有效性在每次使用时重新检查。发布包可回溯历史行为，当前授权仍决定该动作现在能否执行。 原生文件能复制并固定时生成获准快照；必须沿用用户现有配置时只固定基线并在启动、恢复及安全边界检查漂移。无法锁定的运行时内部读取标为 observed/unknown。漂移后阻断依赖旧权限或旧 schema 的新动作，不能改写正在运行的用户全局配置。
 
 ### 草稿与发布各有明确写入入口
 
@@ -248,7 +240,7 @@ UI 编辑草稿，发布服务完成 schema 校验、依赖解析和兼容性检
 
 生命周期为 `draft → validated → staged → published → retired`。灰度和生产标签可以移动，但绑定到 Run 时必须解析为具体 release ID。发布失败保留校验报告，不产生半成品版本。
 
-模型切换分为两种：长期默认值变化生成新的 AgentRelease；单次任务允许的临时覆盖生成 ResolvedRunConfig，记录 release_id、覆盖字段、来源与 digest。覆盖仅限 ModelProfile 允许的范围，不得增加工具权限或改变数据出站区域。界面同时显示基础版本和覆盖内容，避免相同版本号掩盖实际配置差异。
+模型切换分为两种：长期默认值变化生成新的 AgentRelease；单次任务允许的临时覆盖生成 ResolvedRunConfig，记录 release_id、覆盖字段、来源与 digest。覆盖仅限 ModelProfile 允许的范围，不得增加工具权限或改变数据出站区域。界面同时显示基础版本和覆盖内容，避免相同版本号掩盖实际配置差异。 原生参数使用带 provider_kind 和 schema_version 的 RuntimeProfile 覆盖；模型与推理强度取该设备、版本和账号实际可用的选项。不支持的值明确报错，不忽略、不映射为猜测的等价值。
 
 ### 升级和回退以运行边界为准
 
@@ -256,7 +248,7 @@ Task 创建时固定 SceneRelease、当前分支读取位置、允许委派的 A
 
 发布回退只改变新任务使用的版本。它不会撤销已经发送的邮件、已修改的文件或已学习的记忆。需要恢复历史剧情时创建分支并绑定当时的世界状态与记忆视图；需要修复错误记忆时产生新的纠正 revision。
 
-Run 固定自研循环代码、策略、Runtime Adapter、LangGraph 和 checkpointer 的兼容版本。旧 Run 的阶段调用顺序及 interrupt 顺序保持不变；不能将新循环代码直接套到旧 checkpoint 上。优先由旧 Worker 镜像完成旧任务；经验证的迁移才可更换绑定，不兼容时从明确业务边界创建关联的新 Run。紧急权限撤销与工具下线仍即时生效。
+Run 固定自研循环代码、策略、Runtime Adapter、LangGraph 和 checkpointer 的兼容版本。旧 Run 的阶段调用顺序及 interrupt 顺序保持不变；不能将新循环代码直接套到旧 checkpoint 上。优先由旧 Worker 镜像完成旧任务；经验证的迁移才可更换绑定，不兼容时从明确业务边界创建关联的新 Run。紧急权限撤销与工具下线仍即时生效。 native Run 固定原生版本、适配器协议和 profile 基线；升级后先验证原生恢复兼容性，不把旧会话导入 LangGraph，也不通过重发原任务掩盖不兼容。
 
 ## 消息流转与 Agent 委派
 
@@ -282,48 +274,40 @@ Run 固定自研循环代码、策略、Runtime Adapter、LangGraph 和 checkpoi
 ```mermaid
 sequenceDiagram
     participant U as 用户客户端
-    participant C as 房间与 Coordinator
+    participant C as Coordinator
     participant D as 业务数据库
-    participant R as 自研 Runtime
-    participant L as LangGraph 与 checkpoint
-    participant P as Context 与 Memory
-    participant G as 模型与工具网关
+    participant R as Runtime Router
+    participant M as 自研 Harness 与 LangGraph
+    participant N as Connector 与原生 Agent
     U->>C: 消息与结构化 @
-    C->>D: 事务保存消息 Task RunSpec 和作业
-    C-->>U: 消息和任务 ID
-    R->>D: 领取租约并校验当前权限
-    R->>L: 按 RuntimeBinding 启动 entrypoint
-    L->>R: 进入自研循环
-    loop 循环策略决定继续
-        R->>L: 调度输入准备 LGStep
-        L->>P: 执行自研上下文和压缩策略
-        P->>D: 保存输入快照与摘要引用
-        P-->>L: 返回固定输入引用
-        L-->>R: 保存阶段结果后返回
-        R->>L: 调度模型调用 LGStep
-        L->>G: 固定请求与 model_call_id
-        G->>D: 保存响应和实际用量
-        G-->>L: 响应引用与结构化动作
-        L-->>R: 保存阶段结果后返回
-        opt 循环选择工具动作
-            R->>L: 调度独立工具 LGStep
-            L->>G: 稳定 operation_id
-            G->>D: 授权后记录 intent 与执行结果
-            G-->>L: 结果引用或需要确认
-            L-->>R: 保存结果或进入等待桥接
-        end
+    C->>D: 保存 Task Run 配置绑定与授权输入
+    C->>R: 派发稳定 command_id
+    alt managed 后端
+        R->>M: 原 RunSpec 与租约
+        M->>M: 自研循环准备输入 调模型 执行工具
+        M->>D: 保存快照和操作结果
+        M->>M: LangGraph 保存阶段进度
+        M-->>C: RunOutcome 与产物引用
+    else native 后端
+        R->>N: 获准设备及 profile 的 ContextEnvelope
+        N->>N: 先记本地命令日志 再提交原生会话
+        N-->>C: 接收回执 原生事件或审批请求
+        C->>D: 去重保存事件 映射任务状态
+        N->>N: 原生循环使用原生记忆 技能 工具和 MCP
+        N-->>C: 原生完成证据与结果 不以传输断开代替完成
     end
-    R->>C: 幂等提交 RunOutcome 和产物引用
-    C->>D: 事务提交业务终态和 Outbox
-    C-->>U: 推送最终回复与任务状态
-    Note over R,L: 等待和故障恢复遵循下图及恢复契约
+    C->>C: 校验任务目标 受众及发布审批
+    C->>D: 幂等提交可发布结果和 Outbox
+    C-->>U: 推送可见回复与任务状态
 ```
 
-流式 token 属于 provisional 输出，携带 run_id、attempt_id、目标受众和递增 chunk 序号；仅经实时服务授权后展示。它不进入房间的权威历史、不参与其他 Agent 的输入。最终消息先持久提交再广播；模型重试时明确废弃旧 attempt 的临时输出。
+流式 token 属于 provisional 输出，携带 run_id、attempt_id、目标受众和递增 chunk 序号；仅经实时服务授权后展示。它不进入房间的权威历史、不参与其他 Agent 的输入。最终消息先持久提交再广播；模型重试时明确废弃旧 attempt 的临时输出。 原生个人模式的流式正文仅对设备所有者可见；待发布审核通过后再形成群聊消息。能力不支持流式时只展示阶段状态，不能把所有原生事件直接广播。
 
 Task 保存 message_id、requester、初始授权、base_seq、版本集合、deadline 和预算；base_seq 包含触发消息所在的事件；同一任务的根 Run 从相同历史截止点分别按权限取输入。子 Run 在该基础上加入获准的委派输入和已提交依赖，单纯变晚启动不会自动读到新消息。
 
 ### Agent 委派与结果返回
+
+下图表示 managed 父 Run 的等待与恢复；子 Agent 可为任一执行后端，均通过 Coordinator 返回业务结果。native 父 Run 的等待位置保存在其原生会话，使用后文的协议能力，不发送 LangGraph Command。
 
 ```mermaid
 sequenceDiagram
@@ -354,11 +338,11 @@ sequenceDiagram
     A->>A: 自研策略决定下一动作
 ```
 
-delegate_task 是平台内部动作，经 Coordinator 处理，不是直接向另一个 Worker 发消息。其输入包含目标实例、任务说明、材料 revision、期望返回范围、是否等待和依赖是否必需；task_id、parent_run_id、授权、版本集合与预算由服务器绑定。
+delegate_task 是平台内部动作，经 Coordinator 处理，不是直接向另一个 Worker 发消息。其输入包含目标实例、任务说明、材料 revision、期望返回范围、是否等待和依赖是否必需；task_id、parent_run_id、授权、版本集合与预算由服务器绑定。 原生 Agent 通过受控协作 MCP/工具桥提交同样的结构化动作，桥接能力由设备所有者显式启用；不能靠解析原生回复中的 @ 自动派发。原生内部子 Agent 作为该 Run 的子轨迹记录，只有经 Coordinator 的跨实例委派才创建平台 child_run_id。
 
 子结果可以先于父等待点到达。创建委派或确认请求时先保存 WaitRegistration；LangGraph 的 interrupt 持久化完成后，Runtime Adapter 才登记 interrupt_id、checkpoint_id 并将等待标记为 ready。结果到达和等待就绪都执行同一个幂等唤醒判断，以 `run_id + wait_id + resume_generation` 唯一地保存 ResumeEnvelope 和恢复作业。
 
-入队只表示已安排恢复，不提前标记结果已消费。Worker 从持久 ResumeEnvelope 读取结果引用，并检查本次代次、租约、当前授权和 Run 状态，再向原 thread_id 发送恢复输入。恢复后的接纳阶段幂等提交消费确认；若确认或后续 checkpoint 丢失，重新核对同一 envelope 与已提交阶段结果。对账器还处理“中断已持久化，但业务等待尚未 ready”的间隙；晚到结果不会重启已取消或结束的 Run。 Adapter 恢复前检查框架位置：仍停在匹配的 interrupt 时提交原 ResumeEnvelope；已越过等待点则按故障恢复继续，不再次发送同一恢复命令；框架已结束时只补交业务终态。
+入队只表示已安排恢复，不提前标记结果已消费。Worker 从持久 ResumeEnvelope 读取结果引用，并检查本次代次、租约、当前授权和 Run 状态，再向原 thread_id 发送恢复输入。恢复后的接纳阶段幂等提交消费确认；若确认或后续 checkpoint 丢失，重新核对同一 envelope 与已提交阶段结果。对账器还处理“中断已持久化，但业务等待尚未 ready”的间隙；晚到结果不会重启已取消或结束的 Run。 Adapter 恢复前检查框架位置：仍停在匹配的 interrupt 时提交原 ResumeEnvelope；已越过等待点则按故障恢复继续，不再次发送同一恢复命令；框架已结束时只补交业务终态。 本段的 thread_id、interrupt 和 Command 仅指 managed 恢复。native 的子结果通过协作桥查询或获准的原生后续输入接纳，按原生会话与 command_id 去重。
 
 默认委派结果先回到父 Run，不直接在群里重复发长消息；群里显示经过脱敏的任务卡。明确要求子 Agent 公开回答时，公开目标必须包含在授权中。B 的输出仍需遵守任务受众，A 不能通过汇总扩大其可见范围。
 
@@ -368,7 +352,9 @@ delegate_task 是平台内部动作，经 Coordinator 处理，不是直接向�
 
 办公房间默认 mention_only。角色扮演和剧本杀通过固定的 SceneRelease 选择轮流、主持人选择或有界自动发言；每轮明确参与者、结束条件和预算。主持规则是独立模块，主持 Agent 可以提出建议，规则引擎决定是否推进 WorldState。自动发言本质上也是有授权和边界的 Task。
 
-每个 AgentInstance 默认只有一个 running 执行片段。等待时 LangGraph 保存中断点并结束本次调用，Coordinator 释放 Worker 和实例槽；恢复重新入队并获取租约。不同 Run 各自拥有 thread_id、上下文和临时工作目录，共享记忆与产物通过 revision 校验，避免暂停任务回来后覆盖新状态。
+每个 AgentInstance 默认只有一个 running 执行片段。managed 等待时保存 LangGraph 中断点并释放执行槽。native 等待只有在适配器证明可持久暂停且原生执行已静止时才可释放本地进程资源，但保留会话的逻辑占用；否则保留该会话的独占锁，平台 Worker 可释放。新任务不能占用仍在等待、取消中或结果未知的原生 session。
+
+native 独占会话的等待还要纳入跨 Task 的资源等待图。Coordinator 在委派前检查目标会话、工作目录与父 Run 的占用依赖；形成环路时拒绝该委派并返回可处理结果，不无限排队。只有已验证独立 profile、会话和工作目录隔离时，才允许由新实例承接，不能为了绕过锁自动复制个人原生环境。
 
 普通新消息只影响未来 Task；新的 @ 产生新 Task，并按实例队列顺序执行。用户选择“补充当前任务”时，协调器保存 steering 事件，并在下一次模型调用或写操作前处理；已在途的动作不能被补充消息追溯修改。“停止并重做”则先取消旧 Task，再创建关联的新 Task。
 
@@ -390,6 +376,8 @@ delegate_task 是平台内部动作，经 Coordinator 处理，不是直接向�
 
 房间保存一份事件历史，每个 Agent 得到按任务和权限生成的视图。可见范围包括房间公开、指定成员、角色私密、任务私密、主持人私密；工作空间和项目资料另有授权关系。办公任务默认以回复的受众为可读取资料的上限，避免 Agent 看过个人秘密后再尝试用提示词阻止泄露。需要使用私密资料时，单独创建私密执行阶段，产物默认私密。
 
+以下逐模型输入组装和 MemoryRevision 规则适用于 managed 路径。native 路径由平台构造经过权限裁剪的 ContextEnvelope，原生运行时再加入自己的指令、历史和资源；平台没有观察到的内部输入不计入完整 ModelInputSnapshot。
+
 Coordinator 为每个 Task 建立 ExecutionGrant，记录请求人、执行身份、允许资料与工具、凭据主体、可委派范围、输出受众和有效期。Agent 身份本身不扩大用户权限；用户凭据仅供该用户发起并授权的任务使用。场景自动轮次使用管理员明确授予的场景服务身份。每次上下文组装都执行以下步骤：
 
 1. 确定 tenant、room、branch、Run、目标受众及 Task 固定的历史截止序号；显式补充与子任务结果按已接收的 revision 加入。
@@ -410,7 +398,7 @@ A 委派 B 时，子授权取父 ExecutionGrant、A 的可委派范围、B 已�
 
 ### 严格剧本模式隔离隐藏真相
 
-以“甲是凶手”为例，该事实只进入主持人或甲的私密规划上下文。严格剧本模式为一个角色配置私密规划和公开发言两个内部 AgentInstance，SceneRelease 分别绑定其发布版本；二者使用独立 Run、checkpoint 和输入快照，对用户显示为同一个角色。公开发言实例只读取公开角色设定、已公开线索和允许动作。私密决策以结构化动作交给规则引擎裁决，规则引擎生成允许公开的事件，再交给公开发言实例表达。
+以“甲是凶手”为例，该事实只进入主持人或甲的私密规划上下文。严格剧本模式为一个角色配置私密规划和公开发言两个内部 AgentInstance，SceneRelease 分别绑定其发布版本；二者使用独立 Run、checkpoint 和输入快照，对用户显示为同一个角色。公开发言实例只读取公开角色设定、已公开线索和允许动作。私密决策以结构化动作交给规则引擎裁决，规则引擎生成允许公开的事件，再交给公开发言实例表达。 首版严格剧本角色仅使用受平台控制的 managed 路径；无法证明原生 profile、记忆、工具与输出隔离时，不允许将其绑定为保密剧情角色。普通角色互动仍可使用原生 Agent。
 
 私密规划器生成的自由文本默认保持私密，不能直接拼进公开发言提示词。确实需要披露某条线索时，由剧本规则或主持人明确解锁对应字段。普通角色扮演可以采用较宽松的角色共享规则，严格剧本模式则以信息隔离作为验收条件。
 
@@ -436,11 +424,13 @@ MemoryRevision 按 tenant、subject、scope 和可见范围归属，记录内容
 
 分支继承分叉点之前的房间历史、WorldState 和分支记忆视图。未来分支里的线索不能回流到旧分支。用户长期资料若允许跨分支使用，需要单独标记，不能和剧情记忆混放。
 
-删除记忆需要联动删除或失效其向量、摘要、缓存及可检索副本，并按保留策略处理快照与日志。保留审计时只留下必要的操作元数据；版本管理不等于永久保留所有私人内容。
+删除记忆需要联动删除或失效其向量、摘要、缓存及可检索副本，并按保留策略处理快照与日志。保留审计时只留下必要的操作元数据；版本管理不等于永久保留所有私人内容。 原生记忆的查看、纠正、删除和隔离能力按能力探测显示；平台删除 MemoryRevision 不等于删除用户设备上的原生记忆。相关撤销同时冻结后续输入与结果发布，发送原生清理请求并保存待处理状态，不能把未确认清理显示为完成。
 
 Mem0 可替换候选记忆抽取与检索实现，但 scope、ACL、修订和删除接口仍由本平台持有。采用前在自己的长对话和剧本数据上比较召回、错记、纠错与成本，不直接套用项目公布的基准分数。
 
-## 多模型与本地部署
+## 模型 API 与本地推理
+
+本节描述 managed Harness 的模型连接。原生 Agent 是另一个 execution_backend，不能登记成 LiteLLM 模型 endpoint；其模型选择、推理强度和连接策略属于 RuntimeProfile。
 
 ModelProfile 同时表达模型参数和执行约束。字段包括 provider、模型标识、endpoint 引用、凭据引用、temperature、top_p、输出上限、上下文窗口、超时、速率限制、数据驻留策略和备用路由。供应商特有参数放在有 schema 的扩展字段里，不做无校验透传。
 
@@ -453,7 +443,7 @@ LiteLLM 适配器提供统一调用入口，特殊模型能力可用原生适配
 | 云端 API | 供应商适配器或 LiteLLM | 配额、429、超时、计费、可用区域和参数差异 |
 | 集中自部署 | 私网 vLLM 服务 | GPU 显存、排队、批处理、模型和解析器匹配 |
 | 本机开发 | Ollama 或本地兼容接口 | 模型能力差异、资源占用、服务认证 |
-| 用户自己的电脑 | 首版通过同机部署或管理员配置的私网连接访问 | 暂不自研桌面 Connector；反向连接、设备身份和断线恢复属于后续扩展 |
+| 用户自己的电脑 | 模型 API 可同机或通过登记私网访问；本地原生 Agent 通过 Local Connector 接入 | Connector 是本版新增必需组件；默认只承载 Agent 协议，不提供任意 localhost HTTP 代理 |
 
 vLLM 提供兼容 API、批处理及工具调用解析等能力；Ollama 明确只支持 OpenAI API 的一个子集。接上相同路径后仍需测试工具调用、JSON 输出和流式结束语义。[vLLM](https://github.com/vllm-project/vllm)、[Ollama 兼容说明](https://docs.ollama.com/api/openai-compatibility)
 
@@ -465,7 +455,92 @@ vLLM 提供兼容 API、批处理及工具调用解析等能力；Ollama 明确�
 
 每次请求前原子预留 token/费用预算，结束后按供应商 usage 结算，缺少 usage 时使用标记为估算的计数并后续对账。本地推理记录 GPU 时间和吞吐，用独立内部成本口径核算，避免显示成“免费”。
 
+## 原生 Agent 与本地连接
+
+**接入对象是用户已安装的 Agent 运行时。** 例如，在“接入 Agent”中选择本机 Codex，指定获准工作目录和配置来源，选择当前可用模型与推理强度，生成一个可被 @ 的 AgentInstance。CoStage 驱动新的专用原生会话，Codex 自己执行循环并使用获准的原生记忆、Skills、Tools 和 MCP；它不只是替自研 Harness 提供模型输出。
+
+### 用户配置与能力发现
+
+用户先配对 Local Connector，再选择已检测到或手动指定的 Codex、Claude Code、dsh 可执行文件。Connector 探测程序与协议版本、模型选项、参数 schema、技能和 MCP 目录，以及会话恢复、取消、审批、事件补读、工具限制和费用报告能力。登记动作不扫描或上传整个用户主目录；只能读取用户选定的配置范围，敏感值在设备侧脱敏。首次注册及配置来源扩大需要设备所有者确认。
+
+界面分“模型 API + 自研 Agent”和“已有 Agent”两个入口。已有 Agent 表单包括提供者、设备、可执行文件版本、工作目录、profile、模型、推理强度、配置来源、原生记忆策略、获准工具/MCP、调用人和输出受众。unsupported、unknown 和未获授权分别显示，禁用无效选项；不能把一个提供者的 high 自动当成另一个提供者的等价计算预算。
+
+| 提供者 | 推荐协议 | 复用能力与明确限制 |
+| --- | --- | --- |
+| Codex | App Server，设备内 stdio 优先 | 使用 thread/turn、审批和事件接口；模型与 effort 由 model/list 确认，Skills/MCP 通过当前协议探测；原生记忆沿用所选 profile，能否细分和导出须检测 |
+| Claude Code | Claude Agent SDK，绑定已安装且兼容的 CLI | 使用会话、工具审批和 hooks；明确指定本地程序及配置来源，保留获准的原生资源；不得仅凭 SDK 默认值推断加载范围 |
+| dsh | 官方 SDK / stdio JSON-RPC，明确本地 dshBin 与 profile | 使用 provider/model、reasoningEffort、持久 session 与审批；prompt 接收回执不是任务结果，按原生完成语义判定 |
+| 其他 Agent | 实现同一 Native Agent Adapter 契约 | 没有会话、审批或结构化事件的 CLI 只暴露已验证的降级能力，不标记为完整兼容 |
+
+以上是协议调研确认的设计接入方式，不表示 CoStage 已实现适配器，也不表示每个已安装旧版本都具有全部能力。[Codex App Server](https://learn.chatgpt.com/docs/app-server)、[Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)、[Claude 配置接口](https://code.claude.com/docs/en/agent-sdk/typescript)、[dsh SDK 协议](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/sdk/protocol/README.md)。
+
+### 本地 Connector 的边界
+
+Connector 是用户设备上的常驻连接进程，主动建立认证 WSS 连接；云端不直接访问用户 localhost，也不公开原生 Agent 的 RPC 端口。设备配对绑定用户和 tenant，使用可撤销的设备凭据。平台只能下发注册过的 Agent 操作和有 schema 的配置字段，不能借设备连接下发任意 shell 命令、任意环境变量、可执行路径或全功能原生 RPC。
+
+Connector 在本地保存 command_id、输入 digest、授权与 lease epoch、native_session_id、投递阶段、原生回执和事件序号。收到命令先落 accepted，发送前先持久保存 dispatch_intent，再向原生进程发送输入；重连以 sequence/ack 补传事件，云端按来源与事件 ID 去重。凭据、原生配置正文和原生历史默认留在设备，平台仅保存必要引用、脱敏元数据以及用户授权发送的任务材料和结果。
+
+配置通过一次运行的 overlay 或独立 profile 生效，不改写用户日常使用的全局默认设置。模型、effort 或 system prompt 仅在原生接口允许的边界生效；不支持中途更新时先结束当前 Run，再开启后续 Run。会话归属使用 SessionScopeDigest，至少包含 tenant、device_owner、requester、credential_subject、room、branch、agent_instance、profile_scope、资料授权集合与输出受众。请求人、凭据主体或授权范围改变时默认建立新会话；受控模式同时使用已验证隔离的原生记忆/profile 范围，否则拒绝复用，不能仅清空界面消息。权限撤销仍实时检查，旧会话不因 scope digest 未变而继续获权。默认新建 CoStage 专用会话，不接管用户终端里正在运行的会话；使用历史会话要显式选取，并确认分支、授权和并发占用。
+
+### 原生资源与分享范围
+
+| 使用模式 | 原生配置与记忆 | 调用和结果策略 |
+| --- | --- | --- |
+| 个人原生模式，默认 | 可以沿用用户已授权的既有记忆、Skills、Tools、MCP 与本地身份；内部来源可能不可追踪 | 默认仅本人发起；原生正文和产物先对所有者私密，进入群聊或交给其他 Agent 前须显式批准该结果及受众 |
+| 受控协作模式，可选 | 使用独立 profile、工作目录与原生记忆范围，只加载获准资源；需实际验证工具、文件、网络与配置来源限制 | 所有者显式授权调用人及房间，适配器能力满足要求才允许自动委派和自动发布；能力不足则拒绝启用该模式 |
+
+读取用户既有记忆是本需求的一部分，但原生历史中可能包含其他项目材料。个人模式的结果分享审批负责明确披露决定，不能作为内存隔离证明。受控模式不直接复用一个无法隔离的全局记忆库；可由所有者选择并导入获准资料。平台 ContextEnvelope 只附带该任务授权的房间消息、文件和规则，原生内部新增内容的来源未知时保持私密。原生进程共享配置或数据目录也须按安全范围检查，不能只靠不同 session ID 声称隔离。
+
+原生登录、密钥和 MCP 凭据在设备上使用，不上传或借给其他租户。Claude Agent SDK 的官方说明限制第三方产品提供 claude.ai 登录或额度；CoStage 的该适配默认采用官方允许的 API 凭据或已获准方式，不能把已有订阅登录直接承诺为产品可复用额度。[认证边界](https://code.claude.com/docs/en/agent-sdk/overview)
+
+### 命令投递与原生恢复
+
+```mermaid
+sequenceDiagram
+    participant C as Coordinator
+    participant G as Connector Gateway
+    participant L as 本地 Connector
+    participant N as 原生 Agent
+    L->>G: 设备认证 能力版本和事件游标
+    C->>G: command_id 输入引用 授权与截止时间
+    G->>L: 通过已有连接派发任务
+    L->>L: 校验所有者 profile 租约并保存命令日志
+    L->>N: 向绑定会话提交原生输入
+    N-->>L: 会话与 turn 或 message 接收回执
+    L-->>C: 持久回执和有序事件
+    opt 原生工具需要批准
+        N-->>L: 原生审批请求与动作信息
+        L-->>C: 绑定原请求 ID 的审批事件
+        C-->>L: 获准主体对具体动作作出决定
+        L->>N: 再验当前授权并回复原生审批
+    end
+    N-->>L: 原生完成证据 结果与可得 usage
+    L-->>C: 幂等补传结果与观测范围
+    C->>C: 校验目标与结果受众 必要时等待分享批准
+    Note over C,N: 断线先查询原会话和命令日志 不重发可能已执行的 prompt
+```
+
+同一 command_id 重投只返回本地已有记录；输入 digest 不同则拒绝。dispatch_intent 后未保存可核实原生回执的间隙标为 delivery_unknown，包含可能尚未发出的崩溃间隙。只有原生协议提供可验证幂等或查询关联证据时才补齐绑定；否则停止并对账，不能因为没有回执就新建 session 重做。dsh 的 messageId 只表示输入入队；适配器必须等待约定的根会话及所需原生后代完成证据，不能把一次 idle 或首条 assistant 文本当作完成。[dsh 协议语义](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/sdk/protocol/README.md)
+
+断线、睡眠、进程退出和平台 Worker 接管分别处理。Connector 连接断开不等于原生任务停止；平台将 delivery/connection 状态与 Run 状态分开，并锁住原生会话与工作目录，直到原设备确认静止或人工对账。Local Connector 在失去短期执行授权时阻止新命令和审批，按适配器能力中断原生进程；已经发出的外部请求仍可能完成，标记未知效果。云端 lease epoch 无法直接 fence 原生 CLI 已启动的外部操作。
+
+恢复先查询原生 session、turn/message 与本地命令日志。支持恢复时继续原会话；只支持历史查看时返回已完成部分并阻断；不支持恢复时需要用户明确决定以新 Run 重新执行。取消先记 cancel_requested，只有原生静止及需处理的后代已确认后才进入 cancelled；超时未确认时保留 blocked/cancellation_unknown，不能启动替代执行。原生进程等待审批期间可保持运行，只有能力报告明确支持持久等待才能销毁并恢复。
+
+### 跨运行时委派与治理
+
+平台发布一个可选的协作 MCP/工具桥，提供 delegate_task、task_status 和 task_result。原生适配器在所有者批准的运行配置中加载该桥，使用绑定 Run 的短期授权，Coordinator 仍校验目标、预算、受众和委派深度。原生内部 subagent 不自动成为群聊 Agent，也不默认具有其他空间的身份。
+
+managed 父 Run 等待 native 子 Run 时沿用 LangGraph 的持久 interrupt。native 父 Run 可通过协作桥异步查询结果；只有协议确实支持对应等待与恢复时才保持原生等待调用。原生父 turn 先结束、必需子任务未完成时，父 Run 保持 waiting_children 并独占原会话。结果齐备后以 wait_generation、结果 revision 和稳定的新 command_id 幂等提交后续 turn，继续同一父 Run；子结果按授权 ContextEnvelope 送入，不能伪装成旧工具结果。该模式要求原生支持可关联的串行后续输入；不支持时拒绝需要异步续接的必需委派，只允许已验证的同步等待方式或无需父续接的可选委派。跨 Run 的后续任务同样使用新 command_id。无法可靠暂停的原生父会话保留占用，不为节省资源而重启。
+
+平台 Tool Gateway 只治理经过它的调用。原生内置工具、hooks 和直接连接的 MCP 由原生权限系统及设备执行边界约束；适配器通过官方审批与 hooks 转交允许观察和控制的动作。没有执行前阻断能力时，不能标为平台已强制审批；没有参数或对象范围的审批请求不能自动批准写入。后台 shell、原生子 Agent、MCP 和 hooks 也必须纳入受控模式的实际验证。
+
+dsh 的通知覆盖整个 runtime，适配器必须在设备侧按获准根 session 及允许的后代过滤，再上传；不能先上传其他会话再依靠前端隐藏。
+
+native 的完整输入、逐模型 token、压缩步骤、内部工具回执可能不可见。观测报告同时给出 coverage、source 和缺失原因；未知费用显示 unknown，不显示为零。原生运行可设置其支持的费用/轮次上限，平台统一任务次数、墙钟时间和已知费用；无法逐请求拦截的原生路径仅提供软费用预算，不宣称硬 token 上限。完整能力矩阵与运行示例见 [原生 Agent 接入说明](https://github.com/crocodiles6/CoStage/blob/main/docs/native-agent-integration.md)。
+
 ## Skills 与工具治理
+
+本节的发布制品、隔离执行器和 Tool Gateway 约束作用于 managed 路径及经平台网关执行的协作工具。native 的本地资源、内置工具和 MCP 使用前节的能力探测、原生审批与设备隔离，不自动经过平台网关。
 
 ### Skills 作为可发布资源
 
@@ -479,13 +554,15 @@ Agent 可以建议新的技能内容，产物进入草稿，经管理员审核�
 
 ToolDefinition 包含输入与输出 schema、实现 revision、权限需求、幂等能力、超时和允许的执行环境。读写副作用由可信注册配置定义，不能仅根据外部工具描述判断。
 
-所有工具调用先经过参数校验、实时授权和调用账本，再进入执行器。默认读取和本任务产物写入可自动执行；向外发送消息、提交或合并变更、修改外部业务记录等动作需要具备该资源权限的用户确认，管理员可预先授予范围明确的自动执行策略。确认绑定工具版本、规范化参数 digest、授权主体、有效期和 operation_id，界面展示对象与影响。拒绝确认形成工具结果返回 Agent；若请求的核心动作未执行，Task 不得标记为成功。参数或对象变化后重新确认，执行时再检查当前权限。
+经过平台 Tool Gateway 的工具调用先经过参数校验、实时授权和调用账本，再进入执行器。默认读取和本任务产物写入可自动执行；向外发送消息、提交或合并变更、修改外部业务记录等动作需要具备该资源权限的用户确认，管理员可预先授予范围明确的自动执行策略。确认绑定工具版本、规范化参数 digest、授权主体、有效期和 operation_id，界面展示对象与影响。拒绝确认形成工具结果返回 Agent；若请求的核心动作未执行，Task 不得标记为成功。参数或对象变化后重新确认，执行时再检查当前权限。
 
 工具返回内容继承被访问资源的可见范围，未经确认的分类默认私密；进入下一次模型输入前仍由上下文模块校验受众。原始工具输出和私密规划不走公开 token 流。模型或外部文件给出的指令不能修改 AgentRelease、授予权限或直接发起委派，只能由已有权限下的结构化动作交给平台处理。
 
 ### MCP 分别记录协议与实现
 
 调研日最新 MCP 规范为 **2026-07-28**。该版本改为无状态请求，在每次请求中携带协议版本和能力，移除了旧的初始化握手及协议级会话；长任务能力作为扩展提供。平台需维护新旧协议适配器，不能直接套用 2025 版连接假设。[规范](https://modelcontextprotocol.io/specification/2026-07-28)、[变更说明](https://modelcontextprotocol.io/specification/2026-07-28/changelog)
+
+平台 MCPBindingRevision 与原生 MCP 配置分别记录。原生 Agent 继续使用其实际支持的协议与认证，不由平台强行升级；可选协作桥必须提供与该客户端兼容的协议适配，未通过能力校验就不能加载。
 
 MCPBindingRevision 至少分别记录：
 
@@ -517,19 +594,23 @@ MCPBindingRevision 至少分别记录：
 | AgentRelease / AgentInstance | manifest_digest、agent_id、room_id、release_id | 发布不可变，实例改绑版本产生审计事件 |
 | Task | requested_by、branch_id、base_seq、release_map、grant_id、budget、status | 一次执行请求，包含一个或多个根 Run，统一预算与截止时间 |
 | Run / RunAttempt | task_id、agent_instance_id、parent_run_id、release_id、resolved_config_id、status、lease_epoch | 一个 Agent 的执行；根 Run 的 parent 为空，恢复不改变业务身份 |
-| RuntimeBinding | run_id、thread_id、entrypoint_revision、adapter_revision、framework_versions | 一个 Run 固定执行契约；接管不更换绑定 |
+| RuntimeBinding | run_id、backend_kind、adapter_revision；managed：thread_id、entrypoint_revision、framework_versions；native：device_id、profile_revision、native_session_id、runtime_version | 带类型的互斥绑定；同一 Run 只能有一个执行与恢复所有者 |
+| ConnectorDevice / RuntimeProfileRevision | owner_id、device_id、credential_ref、allowed_workdirs、runtime_ref、config_digest、sharing_policy | 设备身份可撤销，配置版本不可变，密钥留在设备 |
+| NativeSessionBinding / NativeCommand | session_scope_digest、native_session_id、run_id、command_id、input_digest、delivery_state、native_receipt、lease_epoch | 一会话一个活动 Run；不明投递禁止盲重发 |
+| NativeEvent / NativeResourceSnapshot | source、event_id、cursor、coverage、resource_refs、reproducibility_level | 事件补传去重；原生资源区分 pinned、observed、unknown |
+| ContextEnvelope | run_id、cutoff_seq、input_refs、audience、grant_revision、digest | 平台实际发送给原生 Agent 的材料；不冒充完整模型输入 |
 | RunStep / ModelInvocation | step_id、stage、input_ref、result_ref、operation_id、attempt | 业务动作与结果索引，补齐 checkpoint 落后的间隙 |
 | WaitRegistration / ResumeEnvelope | wait_id、interrupt_id、checkpoint_id、generation、event_refs、ack_status | 区分等待 ready、恢复已入队和结果已接纳 |
 | SummaryRevision | source_range、retained_boundary、policy_revision、model_ref、acl | 压缩结果可追溯，长期记忆独立修订 |
-| ModelInputSnapshot | model_call_id、run_id、cutoff_seq、input_refs、grant_revision、request_ref、digest | 每次模型调用的实际输入与配置 |
+| ModelInputSnapshot | model_call_id、run_id、cutoff_seq、input_refs、grant_revision、request_ref、digest | managed 每次调用的实际输入与配置；native 只有确获完整输入才产生同类快照 |
 | ExecutionGrant | task_id、principal、scope、credential_subject、audience、expires_at | 静态授权上限，使用时仍检查实时权限 |
 | MemoryRevision | subject、scope、source_refs、supersedes、valid_time、acl | 支持纠正、回溯和按来源删除 |
 | Delegation | delegation_id、parent_run_id、child_run_id、input_revision、required、result_ref | 唯一委派身份、依赖和结果消费状态 |
 | ToolInvocation | operation_id、run_id、step_id、tool_revision、args_digest、status、external_receipt | 防重账本，包含结果未知状态 |
-| Approval | operation_id、args_digest、approver、expires_at、decision | 确认精确绑定待执行动作 |
+| Approval | operation_id、args_digest、approver、expires_at、decision | 区分平台工具、原生动作与结果分享；原生关联 request_id、session、epoch、参数和受众 |
 | WorldState / ArtifactRevision | artifact_id、revision、content_ref、acl | 业务产物与剧情状态独立修订，更新时校验前置版本 |
 | Outbox / RunJob | event_id、run_id、resume_generation、available_at、lease_until | 事务内保存派发意图，唯一键避免重复恢复 |
-| UsageLedger | task_id、run_id、model_call_id、attempt_id、reserved、actual、pricing_version | 预留与结算分离，子任务共用总额度 |
+| UsageLedger | task_id、run_id、model_call_id、attempt_id、reserved、actual、pricing_version | 预留与结算分离；记录 source、coverage 和 estimated，native 未知费用保留 unknown |
 
 消息的展示对象由 RoomEvent 投影而来。编辑消息产生新 revision，已启动 Run 仍能定位其输入版本；删除通过删除标记和受控内容清理实现，界面、检索和摘要同步更新。数据库不需要把所有字段都改造成完整事件溯源系统，保留关键事实事件和当前查询表即可。
 
@@ -550,19 +631,30 @@ MCPBindingRevision 至少分别记录：
 | `POST /rooms/{id}/branches` | 从明确事件点创建分支 |
 | `GET /releases/{id}/diff?base=...` | 对比依赖与内容差异 |
 
+| 原生接入接口 | 行为 |
+| --- | --- |
+| `POST /connectors/pairings`、`POST /connectors/{id}/revoke` | 短期配对，由设备所有者确认；撤销后停止新命令与审批 |
+| `GET /connectors/{id}/capabilities` | 查询已授权探测结果、版本与有效时间，不代理任意 RPC |
+| `POST /runtime-profiles`、`POST /runtime-profiles/{id}/revisions` | 选择设备、原生提供者、配置来源和能力允许的参数；发布新 revision |
+| `GET /runs/{id}/native-session` | 按权限查看会话绑定、投递状态、连接状态和恢复能力 |
+| `POST /runs/{id}/reconcile` | 查询或人工确认未知投递与外部效果；不会隐式重发 prompt |
+| `POST /approvals/{id}/decisions` | 原生动作批准与私密结果分享批准均绑定具体对象和受众，类型不可互换 |
+
 异步提交返回 202 和可查询 ID；消息写入与初始任务入队在同一数据库事务内完成。相同 Idempotency-Key 和相同参数返回原结果，不同参数返回冲突。接口的授权失败、版本冲突、限流和能力不匹配使用可区分的错误码。
 
-首版使用 HTTP 提交和 SSE 推送。每条持久事件有游标，重连先补拉再继续订阅；跨实例广播通过 Outbox 和通知层完成。对慢客户端合并或丢弃临时 token delta，保留最终消息与关键任务状态；客户端按 event_id 去重。需要复杂在线协作时再增加 WebSocket，不改变底层事件格式。
+浏览器首版使用 HTTP 提交和 SSE 推送。每条持久事件有游标，重连先补拉再继续订阅；跨实例广播通过 Outbox 和通知层完成。对慢客户端合并或丢弃临时 token delta，保留最终消息与关键任务状态；客户端按 event_id 去重。Local Connector 单独使用主动连接的认证 WSS 承载双向命令和事件，与浏览器 SSE 独立。
 
 ## 任务恢复与一致性
 
-Run 的状态为 queued、running、waiting_children、waiting_approval、blocked，以及终态 succeeded、failed、cancelled、budget_exhausted。waiting 状态释放 Worker 和实例执行槽；满足持久恢复条件后回到 queued。blocked 用于权限、版本或外部写入结果未知等需要处理的问题，必须带原因和解除条件。
+Run 的业务状态为 queued、running、waiting_children、waiting_approval、blocked，以及终态 succeeded、failed、cancelled、budget_exhausted。managed 等待状态释放 Worker 和实例执行槽；native 是否释放原生进程由能力决定，同一会话仍被独占。原生执行已结束但结果尚待分享批准时，Run 保留 waiting_approval，原生执行状态另记 completed；批准后提交发布结果，拒绝则保留私密产物和明确的未分享结果。
 
-Task 聚合所有必需根 Run 与必需委派：全部完成才为 succeeded；只有部分目标完成或存在未解决的必需失败时为 partial，保留产物和未完成项；全部失败为 failed；用户取消为 cancelled；总预算或截止时间耗尽记录对应终止原因并保留部分结果。可选委派的失败只产生警告，必需委派的失败不能被父 Agent 的一句“完成了”覆盖，只有记录明确的替代执行结果才能消除。根 Run 结束时，未被接纳为后续工作的可选子 Run 取消。等待人工输入标记 waiting，外部结果待核对标记 blocked，不展示为成功。
+connection_state、delivery_state、cancel_requested 和 native_execution_state 独立记录。断线不直接改变成 failed，租约到期不直接改变成 cancelled；取消或预算耗尽后，只有原生任务及需终止的后代已确认静止，才落相应终态。未确认则 blocked 并显示 cancellation_unknown，冻结原会话、工作目录及替代执行。权限、版本或外部写入结果未查明也进入 blocked，查明后再按原恢复契约继续。
 
-Worker 通过 PostgreSQL 短事务领取 RunJob，获得租约和递增 fencing token。定期心跳续租，过期后允许接管；旧 Worker 的状态、checkpoint 写入、结果提交和新工具请求都须通过当前 token 校验。实例执行槽也用租约控制，但租约只覆盖一次运行片段，不跨子任务等待。租户配额与轮转调度限制单个空间占满执行资源。 对 checkpoint 的 fencing 校验必须与写入处于同一数据库事务；仅在写入前单独检查租约不足以阻止过期 Worker。Runtime Adapter 的 checkpointer 包装层负责这个存储契约，复用框架保存格式和恢复机制。
+Task 聚合所有必需根 Run 与必需委派：全部完成才为 succeeded；只有部分目标完成或存在未解决的必需失败时为 partial，保留产物和未完成项；全部失败为 failed；用户取消先记 cancel_requested；仅当必须停止的全部根 Run 与后代已终止或确认静止后，Task 才为 cancelled。仍有 native 后代停止未确认时，Task 保持 blocked/cancellation_unknown，界面显示“取消中”，禁止重做。总预算或截止时间耗尽沿用相同静止确认规则，随后记录终止原因并保留部分结果。可选委派的失败只产生警告，必需委派的失败不能被父 Agent 的一句“完成了”覆盖，只有记录明确的替代执行结果才能消除。根 Run 结束时，未被接纳为后续工作的可选子 Run 取消。等待人工输入标记 waiting，外部结果待核对标记 blocked，不展示为成功。
 
-### 框架重放与业务恢复
+managed Worker 通过 PostgreSQL 短事务领取 RunJob，获得租约和递增 fencing token。定期心跳续租，过期后允许接管；旧 Worker 的状态、checkpoint 写入、结果提交和新工具请求都须通过当前 token 校验。实例执行槽也用租约控制，但租约只覆盖一次运行片段，不跨子任务等待。租户配额与轮转调度限制单个空间占满执行资源。 对 checkpoint 的 fencing 校验必须与写入处于同一数据库事务；仅在写入前单独检查租约不足以阻止过期 Worker。Runtime Adapter 的 checkpointer 包装层负责这个存储契约，复用框架保存格式和恢复机制。
+
+### managed 框架重放与业务恢复
 
 Functional API 从 entrypoint 起点重放控制流，并复用已持久化的 LGStep 结果；它不会保存 Python 的程序计数器，也不从任意中断行原地继续。自研循环因此只在持久阶段内读取可变输入、调用模型、提交业务变更或产生影响分支的随机值。阶段调用顺序由固定代码及已有阶段结果决定；不能在重放期间用最新房间历史改变已经走过的分支。[恢复语义](https://docs.langchain.com/oss/python/langgraph/functional-api#determinism)
 
@@ -591,27 +683,47 @@ Functional API 从 entrypoint 起点重放控制流，并复用已持久化的 L
 | MCP schema 或执行版本不兼容 | 阻断并显示差异，执行明确迁移或关联新 Run | 不静默接受新工具或更换循环顺序 |
 | 流连接断开或产物 revision 冲突 | 补拉已提交事件；冲突后重新裁决 | 保留最终结果，不覆盖其他任务的修改 |
 
+native 不使用上述 checkpoint 恢复，按原生证据处理：
+
+| 中断位置 | 恢复依据与动作 | 必须保留的边界 |
+| --- | --- | --- |
+| 本地仅有 accepted，尚无 dispatch_intent | 校验原授权后发送同一 command_id | 不更换输入与身份 |
+| 已发送，原生回执未保存 | 查询原生可关联证据；没有证据则 delivery_unknown | 不重发、不新建会话绕过 |
+| 连接断开或设备休眠 | 等待原设备重连，按事件游标补传，查询原会话 | 云端不抢占并启动另一份执行 |
+| 原生进程退出 | 检查原生持久会话、未决操作与恢复能力 | 能看历史不等于能继续未完动作 |
+| 取消、撤权或截止时间到达 | 送达原生中断并确认静止，核对已发出的外部动作 | 不以云端状态代替停止证明 |
+| 原生版本或 profile 漂移 | 校验原绑定，阻止不兼容恢复 | 不偷换模型、资源或原生记忆 |
+| 重连重复上报终态与结果 | 以命令、原生来源事件 ID 和结果 revision 去重 | 同一结果只发布一次 |
+
 整体采用“至少一次投递 + 幂等业务处理”。具备幂等键或查询回执的外部服务，可以去重或核对效果；没有这些能力的写操作遇到未知结果时转人工处理。平台不能仅靠本地数据库为任意第三方操作提供 exactly-once。
+
+对 native，平台的至少一次投递只到 Connector 的去重日志；Connector 到原生运行时是否可重试取决于该协议，不能把平台传输承诺扩展成原生副作用承诺。
 
 工具执行前先持久化 intent、参数和 operation_id，并绑定逻辑步骤与已保存的模型工具调用。恢复时先查该步骤已有的 intent；存在未知写入就先对账，不能通过重新生成模型回答和新 ID 绕开它。有原生幂等键的服务传入同一个 operation_id，传输重试可使用新的请求 ID。
 
 只读操作可按策略重试，写操作先判断是否安全重试。租约接管后的旧请求即使仍在远端执行，也会在同一调用账本中核对，不立即发起第二次未知写入。超过重试上限的任务进入可查询的失败队列，保留错误、最后 checkpoint 和恢复入口。
 
-等待状态、ResumeEnvelope、取消和截止时间均在业务库持久保存。重启后扫描过期租约、等待桥接间隙、未确认恢复和 Outbox；LangGraph 本身不承担跨 Worker 队列、租户公平调度或分布式租约。对账器只协调这两套记录，不解释 Agent 策略。
+等待状态、ResumeEnvelope、取消和截止时间均在业务库持久保存。重启后扫描过期租约、等待桥接间隙、未确认恢复和 Outbox；LangGraph 本身不承担跨 Worker 队列、租户公平调度或分布式租约。对账器只协调这两套记录，不解释 Agent 策略。 native 另扫描设备连接、命令回执、事件游标和取消确认，恢复由 Native Adapter 与原设备协议完成，不创建 LangGraph checkpoint 来代替。
 
 轨迹回放只查看历史请求、事件和工具结果；故障恢复沿同一 Run 和 RuntimeBinding 继续。为了比较新模型或策略而重新执行时，创建关联的新 Run，默认使用录制或模拟工具，禁用外部写入。LangGraph 的历史 checkpoint 重放可能重新执行后续动作，因此不能作为生产环境“安全预览”的入口。[checkpoint 重放](https://docs.langchain.com/oss/python/langgraph/checkpointers#replay)
+
+原生会话的 fork/resume 也不等于无副作用回放。native 新运行的对比必须重新确认资源与授权；其内部轨迹不足时，只比较平台可观察结果与已知成本，不生成虚构的逐步回放。
 
 ## 可观测与评测
 
 每条任务链贯穿 `tenant_id、room_id、branch_id、task_id、run_id、parent_run_id、agent_release_id、step_id、operation_id、model_call_id、model_input_snapshot_id、runtime_binding_id`。异步委派通过 trace link 和业务 ID 连接；人工等待不占用持续打开的 span。RunAttempt 与模型请求 attempt 分开记录，避免把一次 Worker 接管误计成一次新的业务任务。
 
+native 额外贯穿 device_id、provider_kind、runtime_version、profile_revision、native_session_id、command_id、native_turn/message_id 和 event_source；平台 RunStep 与原生事件可关联，但不将无法观测的内部阶段补成成功记录。
+
 埋点由平台定义，粒度独立于 LGStep。一个上下文准备阶段内部可以分别记录检索候选、权限过滤、排序、压缩、输入验证和快照提交。事件包含 stage、版本、输入输出引用、排除原因、耗时及 token 变化；敏感正文沿用原权限。这样调整压缩或记忆策略时，可定位哪一步改变了输入，不必把每个埋点都拆成框架执行节点。
+
+上述细粒度埋点由自研 Harness 提供。原生路径只采集协议、hooks 或原生导出明确提供的事件；ContextEnvelope 显示平台送入的上下文，原生全量模型输入、压缩轨迹和记忆检索分别标注覆盖范围。
 
 区分持久业务事实、实时展示事件与观测副本。实际模型请求产生 usage；复用阶段结果只记录 replay/cache_hit，不重新计费、不伪造新的工具执行。观测监听器不修改循环决策；需要影响行为的扩展必须通过有版本、有序执行的策略接口。
 
 ### 用户可见的运行面板
 
-用户能够从一条回复追到所用 Agent 版本、模型、输入来源、工具、子任务、耗时和费用。失败时显示失败阶段、已完成产物和可用恢复动作。权限允许的调试人员可以查看完整调用时间线和版本差异。
+运行面板显示 Agent 发布、执行后端、实际模型、输入来源、工具、子任务、耗时和费用，以及信息来源与覆盖程度。native 同时展示设备在线状态、原生版本、会话、配置漂移、审批和恢复动作；未知的模型、token 或费用显示 unknown。失败时列出已完成产物和可用动作，不把所有错误都显示为“重试”。
 
 记录明确的路由结果、工具参数、审批依据和输出来源即可。隐藏思维链不作为观测依赖，也不默认保留模型返回的敏感 reasoning 内容。Prompt、记忆和工具响应的查看权限独立于“能看这条公开回复”。
 
@@ -625,11 +737,19 @@ Functional API 从 entrypoint 起点重放控制流，并复用已持久化的 L
 | 上下文与记忆 | 各阶段输入长度、压缩前后 token、过滤原因、检索来源、记忆纠错率 |
 | 协作质量 | 委派完成率、循环拦截、并发冲突、重复产物、需要人工接手的任务 |
 
+| 原生接入观测 | 关键指标 |
+| --- | --- |
+| 设备与协议 | 在线率、心跳时延、版本漂移、能力探测有效期 |
+| 投递与恢复 | delivery_unknown、事件补传积压、原生会话占用、取消确认时延 |
+| 治理与数据覆盖 | 未获支持的审批、分享待批准、原生输入/工具/费用 coverage、unknown 费用占比 |
+
 Langfuse 接收 LLM 与 Agent trace，OpenTelemetry 同时接入应用运维监控。生产默认上报脱敏元数据；原文按权限、采样和保留策略保存。追踪导出失败不能阻塞聊天，但关键工具审计必须先写本地业务账本，随后补发。
 
 ### 评测绑定发布版本
 
 每个候选 AgentRelease 绑定数据集和评测策略版本。离线比较固定模型、任务、输入快照与工具模拟，在线灰度按房间或用户分组，避免同一个剧本中途混入不同规则。
+
+native 候选发布同时固定或观测原生版本、profile、原生资源快照和能力报告；只有配置可固定且输入/输出足够可观察时才声称可复现。个人模式和受控协作模式分开评测，不能用 managed 的细粒度轨迹覆盖率作为已经满足的事实。
 
 角色扮演看人物一致性和关系记忆，剧本杀看秘密泄露、线索时序和规则执行，办公看任务完成、来源准确性、产物可用性和重复操作。程序断言负责版本、权限与状态约束；人工或模型评审负责难以机械判断的文本质量，模型评审需要人工抽查校准。
 
@@ -641,9 +761,15 @@ Langfuse 接收 LLM 与 Agent trace，OpenTelemetry 同时接入应用运维监�
 
 API 与 Worker 使用同一模块化业务代码库，可分别部署和扩缩容；工具执行器位于独立隔离环境。基础存储为 PostgreSQL/pgvector 与对象存储，模型网关采用 LiteLLM，观测接入 Langfuse 与 OpenTelemetry。Redis 仅在需要跨实例通知和短期缓存时启用。自托管观测平台的数据库与分析存储单独计入资源预算。
 
+增加 Connector Gateway 维护设备 WSS 和命令/事件通道，可作为同一服务的独立部署角色；用户设备运行 Local Connector 和已安装的原生 Agent，设备侧不部署云端数据库。原生 SDK 需要其他语言时通过设备侧协议进程集成，不因此改变平台主技术栈。
+
 生产 API 无状态，Worker 按队列积压和模型配额扩缩容。先在单区域运行，PostgreSQL 开启备份与时间点恢复；附件和发布制品使用对象存储版本及生命周期策略。试点目标 RPO 5 分钟、RTO 1 小时，需要以恢复演练验证。
 
+这些 RPO/RTO 是云端数据目标；设备离线、损坏或本地原生会话日志丢失无法由云端备份自动恢复。设备命令日志、原生持久存储及用户选择的备份方案单列，连接离线期间任务显示等待和截止时间，不承诺云端自动接管。
+
 运行中的旧发布由兼容的固定 Worker 镜像承接。更新时停止领取新任务，保存安全节点后移交未完成任务。管理员发布的工具脚本默认在非 root 容器中执行，限制资源、目录和出站访问。代码执行、浏览器自动化等会接触用户或模型生成代码的工具使用更强的隔离边界，例如 microVM；普通成员自行上传可执行技能不在首版范围。
+
+原生运行绑定设备上的兼容版本与已获准工作目录，平台不能自动升级或改写用户安装。Local Connector 的运行权限来自设备所有者，受控协作模式还需独立 OS 用户/沙箱等可验证隔离；云端工具执行器的隔离不会自动覆盖用户机器。
 
 先使用 PostgreSQL 任务队列，不把 Redis Pub/Sub 作为唯一任务来源。出现大量跨天等待、多系统补偿和复杂定时编排时，再考虑 Temporal；迁移后由 Temporal 拥有外层工作流生命周期，LangGraph 只执行明确的 Agent 子过程，防止双重重试与双重状态管理。
 
@@ -661,11 +787,15 @@ API 与 Worker 使用同一模块化业务代码库，可分别部署和扩缩�
 | 取消 | 2 秒内停止新动作派发；在途外部调用状态持续核对 |
 | 隔离 | 固定测试集中，跨租户、角色秘密和撤销权限场景全部通过 |
 
+上述任务启动、故障接管和模型并发目标以 managed 路径、在线基础设施及可用配额为测量前提。native 单列设备在线条件下的命令送达与事件转发开销，端到端执行、原生恢复和取消时延按提供者能力实测；离线不计为可立即启动。
+
 100 个并发模型请求和平均 20 秒请求时长，对应约每秒 5 个模型调用的稳定处理需求。一个任务若需要多个模型调用，用户任务吞吐会更低。容量计划必须同时考虑 RPM、TPM、GPU 队列和输出速率，不能只按在线人数估算。
 
 ### 成本主要由调用次数与上下文决定
 
 每个 Task 的成本包含模型输入与输出、embedding、检索、工具、存储和推理算力。模型价格采用带生效时间的 PriceCatalog，usage 与价格版本一起结算。
+
+native 按可获得的 usage、订阅/API 计费口径和估算分别展示；费用未知时保留 unknown，已知成本不能包装成完整 Task 总成本。
 
 例如，6 个 Agent 各执行 40 次调用，每次输入 30,000 token，总输入为 720 万 token；若通过权限裁剪、检索和摘要将每次输入降至 8,000 token，则输入为 192 万 token。这个算例只改变输入长度，实际质量与费用仍按相同任务评测。
 
@@ -677,12 +807,14 @@ API 与 Worker 使用同一模块化业务代码库，可分别部署和扩缩�
 
 | 关键选择 | 推荐与理由 |
 | --- | --- |
-| 使用边界 | 用户已确认邀请制、多团队独立空间；同一身份可加入多个空间，资源按 tenant 隔离 |
-| 技术基础 | Python / FastAPI，自研循环与策略，LangGraph Functional API 持久执行；用户已选此职责划分 |
-| 群聊行为 | 普通消息共享，显式 @ 执行；场景自动发言必须有轮次与预算，避免群聊失控和无效成本 |
-| 隐私默认值 | Agent 记忆按房间实例隔离；凭据不随 Agent 共享，严格剧本使用私密规划与公开表达分离 |
-| 部署 | 先采用单区域的模块化单体、独立 Worker 与工具执行器；避免过早引入分布式工作流平台 |
-| 扩展边界 | 首版支持文本与文件、API 及私网模型、管理员发布技能；实时音视频、公开技能市场和跨空间 Agent 网络不纳入本设计 |
+| 使用边界 | 用户已确认邀请制、多团队独立空间；资源按 tenant 隔离 |
+| 执行后端 | managed 使用自研循环与策略 + LangGraph；native 接入 Codex、Claude Code、dsh 自有执行循环与会话 |
+| 统一边界 | 共用房间、Task/Run、授权、发布与事件；模型网关不代理原生循环，同一 Run 不跨后端恢复 |
+| 群聊行为 | 普通消息共享，显式 @ 执行；原生跨 Agent 委派通过获准协作桥，不解析文本伪造调用 |
+| 隐私默认值 | managed 按实例隔离；原生个人模式仅本人调用、结果私密后批准分享；严格剧本使用 managed |
+| 本地接入 | 用户设备的 Connector 主动连云端；显式绑定可执行文件、配置来源和工作目录，保留原生凭据 |
+| 部署 | 单区域模块化单体、Worker、工具执行器与 Connector Gateway；原生进程留在设备 |
+| 范围 | 文本与文件、API 及私网模型、已安装原生 Agent；不加入音视频、公开技能市场或跨空间 Agent 网络 |
 
 ### 关键行为验收
 
@@ -690,7 +822,7 @@ API 与 Worker 使用同一模块化业务代码库，可分别部署和扩缩�
 | --- | --- |
 | 普通聊天、引用中的 @、Agent 自己说出 @ | 保留消息，不自动创建任务 |
 | 两个用户同时 @ 同一 Agent | 同一实例的运行片段排队，各 Task 上下文与凭据独立 |
-| A 等待 B，同时另一 Task 中 B 等待 A | 等待释放执行槽，两个任务都可推进，实例锁不形成死锁 |
+| A 等待 B，同时另一 Task 中 B 等待 A | managed 等待释放执行槽；native 保留会话时检查跨任务资源等待图，拒绝会造成环路的委派 |
 | B 在 A 写入等待状态之前完成 | 先保存结果，等待节点持久化后只恢复一次 |
 | A 和 B 在同一委派链相互委派 | 拒绝祖先循环，有限场景轮次通过明确规则执行 |
 | 用户发送新消息与“补充当前任务” | 前者供新任务读取，后者在下一安全节点生效 |
@@ -714,12 +846,28 @@ API 与 Worker 使用同一模块化业务代码库，可分别部署和扩缩�
 | 恢复循环时房间又出现新消息 | 已执行阶段不改变；新消息按既定 steering 规则在新阶段接纳 |
 | 升级改变阶段或 interrupt 顺序 | 旧 Run 继续使用固定执行版本，未迁移时拒绝新代码接管 |
 | 读取框架缓存结果 | 产生恢复观测记录，不重复产生模型费用和工具执行事件 |
+| Codex / Claude Code / dsh 选择模型与 effort | 依设备版本能力校验；不支持时明确报错，原全局配置不被改写 |
+| 用户已有 Skills、记忆和 MCP | 按批准的配置来源加载；区分可固定资源、观测快照和未知内容 |
+| 同一原生会话收到两个 Task | 单活动 Run 排队；会话、命令和输出不串线 |
+| 原生 prompt 已发送但接收回执丢失 | delivery_unknown，先查询或对账，不自动重投 |
+| 设备断网而原生进程仍运行 | 不在另一设备复制执行；重连补事件，旧结果按来源去重 |
+| 取消、撤权或超时未得到静止确认 | blocked/cancellation_unknown，禁止替代执行，记录未决效果 |
+| 个人原生记忆进入回答 | 默认只有所有者可见；目标群聊和下游 Agent 均等待结果分享批准 |
+| 原生 MCP、hook 或子进程绕过平台网关 | 按真实原生权限与隔离验证；不将平台审批标为已经强制覆盖 |
+| native 父 Run 等待 managed 子 Run | 通过协作桥和原生能力返回；不伪造 LangGraph Command |
+| dsh runtime-wide 通知与多个会话并存 | 设备侧先按获准根会话及后代过滤，再上传，禁止跨会话泄漏 |
+| 原生输入或 usage 不完整 | 展示 coverage 与 unknown，不能伪造全量输入快照和零费用 |
+| 同房间不同成员依次调用原生实例 | requester、凭据主体、资料授权或受众改变即建立新会话及可隔离记忆范围 |
+| native 父 turn 先结束，必需子 Run 后完成 | 同一父 Run 等待，以持久 wait_generation 和新 command_id 幂等续接，不提前判成功 |
+| 取消 Task 但原生后代未确认静止 | Task 显示取消中并保持 blocked，禁止重做，直到全部需停止执行已核实 |
 
 ### 推荐方案的代价与剩余选择
 
-这套方案自行维护产品领域模型、Agent 循环、Context / Memory 策略和恢复适配层，复用 LangGraph 的阶段结果保存与中断机制。控制权来自自研策略接口和稳定事件规范；恢复收益来自正确划分 LGStep，并保留工具幂等及业务对账。若将来要改变框架的重放与持久化语义，再评估全自研执行器；当前不为观测或压缩需求承担这部分额外维护。
+双后端保留了两个收益：managed 能精细控制上下文、记忆和埋点，native 能使用用户已有的 Agent 环境。相应代价是维护提供者协议、版本兼容、设备连接和不同恢复语义；统一体验只能覆盖真实共有能力，不能把它们抹成一套虚假的参数和状态。
 
-实现者可在上述边界内选择 ORM、页面组件、索引与缓存策略。运行时必须验证的假设是：固定调用顺序下 Functional API 的恢复契约、PostgreSQL checkpointer 与业务账本的对账、租约失效后的写入隔离，以及目标负载下同步持久化的开销。它们已有对应验收条件。本设计不展开实施任务、开发排期或代码。
+平台维护统一业务控制面，各后端保留唯一的执行与恢复所有者。当前不自研 checkpoint 引擎，也不把原生 Agent 包成会被 LangGraph 自动重放的大步骤。原生接入的默认个人模式保留易用性；要求自动协作、秘密隔离或完整成本控制时，选择能力已验证的受控 profile，或者使用 managed 路径。
+
+实现者可在上述边界内选择 ORM、页面组件、索引与缓存策略。运行时必须验证的假设是：固定调用顺序下 Functional API 的恢复契约、PostgreSQL checkpointer 与业务账本的对账、租约失效后的写入隔离，以及目标负载下同步持久化的开销。新增原生接入需验证 installed binary 与 SDK 兼容、可恢复会话、原生审批与取消、工作目录隔离及日志失配。能力不满足时按前述降级或拒绝启用，不改变权限和恢复所有者。它们已有对应验收条件。本设计不展开实施任务、开发排期或代码。
 
 ## GitHub 调研附录
 
