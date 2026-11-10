@@ -1,8 +1,8 @@
 # 多 Agent 聊天服务系统设计
 
-设计版本：v4。研究快照日期：2026-11-07，北京时间。服务边界为邀请制、多团队独立空间。本版增加用户本机已有 Codex、Claude Code、dsh 的原生 Agent 接入；自研 Agent 继续使用“自研循环和策略，LangGraph 负责持久执行”。本文限定系统设计，不包含实施计划或产品代码。
+设计版本：v5。更新日期：2026-11-10，北京时间；GitHub 研究快照保留 2026-11-07 的采集结果。服务边界为邀请制、多团队独立空间。已确认采用 TypeScript 主栈，Python 按需作为独立服务；managed 保持自研循环和策略、LangGraph 持久执行，native 保留原生运行时。本文限定系统设计，不包含实施计划或产品代码。
 
-**采用模块化单体与双运行时路径：模型 API 接入自研 Harness，已有 Agent 通过原生适配器接入。** 自研路径使用 LangGraph Functional API 保存阶段结果与暂停恢复，模型网关复用 LiteLLM；原生路径通过 Local Connector 驱动本机 Codex、Claude Code 或 dsh，由原生运行时管理循环、上下文、记忆和恢复。房间、任务、授权、发布、产物与观测规范由 CoStage 统一管理。
+**采用模块化单体与双运行时路径：模型 API 接入自研 Harness，已有 Agent 通过原生适配器接入。** 平台业务、Harness 与 Local Connector 使用 TypeScript，服务端与设备连接进程运行在 Node.js。自研路径使用 LangGraph JS Functional API 保存阶段结果与暂停恢复，模型网关复用独立部署的 LiteLLM；原生路径通过 Local Connector 驱动本机 Codex、Claude Code 或 dsh，由原生运行时管理循环、上下文、记忆和恢复。房间、任务、授权、发布、产物与观测规范由 CoStage 统一管理。
 
 系统让多人、自研 Agent 和本地原生 Agent 在同一个房间协作。平台统一提交任务、接收事件、转交审批和发布结果，按运行时能力展示可配置与可观测范围。原生 Agent 保留其已安装的记忆、Skills、Tools 和 MCP；这些资源仍由原生系统持有，不自动复制到平台，也不默认获得平台级版本锁定和输入可重建能力。
 
@@ -23,7 +23,7 @@
 
 以下情况应判为设计失败：同名 Agent 串用其他房间的记忆；Agent 转交任务后扩大权限；同一消息被重复派发产生重复外部写入；配置升级改变正在执行的任务；观测中缺少实际输入和依赖来源。
 
-LangGraph 提供 checkpoint、阶段结果恢复与 interrupt；Functional API 允许以普通函数和循环表达控制流。自研路径仅使用开源运行库与 PostgreSQL checkpointer，长期记忆保存在平台自己的 Memory Service，不使用 LangGraph Store 作为第二份权威记忆。LangSmith 托管服务不属于必选依赖。[Functional API](https://docs.langchain.com/oss/python/langgraph/functional-api)、[持久化](https://docs.langchain.com/oss/python/langgraph/persistence)、[暂停恢复](https://docs.langchain.com/oss/python/langgraph/interrupts)
+LangGraph JS 提供 checkpoint、阶段结果恢复与 interrupt；Functional API 允许以普通函数和循环表达控制流。自研路径仅使用开源运行库与 JS 版 PostgreSQL checkpointer，长期记忆保存在平台自己的 Memory Service，不使用 LangGraph Store 作为第二份权威记忆。LangSmith 托管服务不属于必选依赖。[Functional API](https://docs.langchain.com/oss/javascript/langgraph/functional-api)、[持久化](https://docs.langchain.com/oss/javascript/langgraph/persistence)、[暂停恢复](https://docs.langchain.com/oss/javascript/langgraph/interrupts)
 
 本版不设计开放注册、跨空间 Agent 网络、任意用户脚本市场、无限自主讨论或微服务拆分。角色扮演、剧本杀和办公仍共用同一底座；严格剧本模式的秘密隔离与办公场景的副作用恢复都属于架构验收范围。
 
@@ -39,7 +39,46 @@ AgentScope 已有 Agent Service、Team、工具和技能管理，可以缩短服
 | 扩展 AgentScope 服务 | Agent、会话、Team、MCP、Skills 与持久化 | 将框架拥有的会话状态映射到多人房间，补齐发布和业务权限 | 接受其服务模型，并优先减少现成服务的开发量 |
 | **自建群聊核心与循环 + LangGraph 持久执行** | 阶段结果持久化、暂停恢复 | 自己维护房间、循环、策略、授权与发布模型 | **用户已选，保留行为控制权并复用恢复机制** |
 
-技术默认值为 React/TypeScript 前端、Python/FastAPI 后端、自研 Agent Runtime、LangGraph Functional API、PostgreSQL + pgvector、对象存储、LiteLLM 和 OpenTelemetry + Langfuse。Pi 继续用作自研循环的设计参考；dsh 同时是原生适配目标。原生适配器可作为设备侧独立进程使用其官方 SDK，不要求平台复制运行时源码或更换主服务语言。
+### 主语言与配套技术
+
+**TypeScript 是已确认的产品主语言，Python 按需作为独立服务。** Web 前端使用 React + TypeScript；API、Coordinator、自研 Harness、Worker、Connector Gateway 与 Local Connector 使用 TypeScript，运行在兼容依赖的 Node.js LTS 上。HTTP 层默认推荐 Fastify，负责路由、输入校验与协议适配；领域逻辑不依赖 HTTP 框架。[Fastify TypeScript 支持](https://fastify.dev/docs/latest/Reference/TypeScript/)
+
+managed 持久执行使用 LangGraph JS Functional API。PostgreSQL + pgvector、对象存储、LiteLLM、OpenTelemetry 与 Langfuse 延续既有职责。LiteLLM 和模型推理服务独立部署，通过接口调用，不因主栈选择而改写其实现语言。Pi 继续作为自研循环参考，dsh 同时是原生接入目标；Codex、Claude Code、dsh 的内部实现保持原样。
+
+语言选择主要考虑产品维护成本。房间消息、审批、任务状态、能力探测和配置界面横跨浏览器、云端与设备，统一 TypeScript 有助于共用协议定义并减少契约漂移。当前上下文压缩和记忆策略以输入筛选、检索、摘要与权限处理为主，可直接在自研 Harness 中实现；计算密集的解析、模型实验和批量分析再交给独立服务。
+
+| 语言方案 | 收益 | 主要代价与本项目判断 |
+| --- | --- | --- |
+| **TypeScript 主栈，Python 按需独立服务** | 前端、云端和 Connector 共用语言与协议；保留自研循环和 LangGraph 持久执行 | Python 专项能力需要服务契约；**用户已选，作为当前设计基线** |
+| Python 后端与 Harness，TypeScript 前端 | 数据处理、检索实验与离线评测集成方便 | 同时维护两套核心工程工具链与跨语言契约；研究工作占主导或团队明显偏 Python 时更合适 |
+| Go 业务服务，TS/Python Agent Worker | 独立二进制分发和服务资源控制方便 | 为既定 Agent 依赖增加语言与部署边界；当前没有足够收益支持引入 |
+
+LangGraph JS 已提供 Functional API、checkpoint 与暂停恢复；Claude Agent SDK 和 dsh 都有 TypeScript、Python 接入方式。两种语言均能接入原生 Agent，本次以统一产品工程作为选型依据。[LangGraph JS](https://docs.langchain.com/oss/javascript/langgraph/functional-api)、[Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)、[dsh SDK](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/sdk/README.md)
+
+#### 模块语言分配
+
+| 模块 | 语言与运行环境 | 职责与边界 |
+| --- | --- | --- |
+| Web 客户端 | React + TypeScript，浏览器 | 群聊、配置、审批与观测界面；不包含服务端凭据和授权决策实现 |
+| API、房间、发布与 Coordinator | TypeScript，Node.js；HTTP 层默认 Fastify | 业务事实、租户授权、任务状态、调度、发布与产物管理 |
+| 自研 Harness、Context / Memory 策略 | TypeScript，Node.js Worker | managed 循环、输入组装、压缩、记忆决策和细粒度埋点 |
+| managed Runtime Adapter 与持久执行 | TypeScript + LangGraph JS | entrypoint、LGStep、等待桥接、checkpoint 与业务账本对账 |
+| Connector Gateway | TypeScript，Node.js | 设备认证 WSS、命令投递、事件接收和连接管理 |
+| Local Connector 与原生适配器 | TypeScript，Node.js，用户设备 | 程序启动、会话绑定、去重日志、审批与事件转交；优先使用兼容的 TS SDK 或原生协议 |
+| 共享接口契约 | TypeScript 类型及可跨语言的 JSON Schema / OpenAPI | 共用公开 DTO、事件和能力 schema；运行时校验所有跨网络与进程输入 |
+| Model / Tool Gateway 的平台适配层 | TypeScript，Node.js | 请求身份、授权、调用账本与事件；第三方网关和隔离工具执行环境独立运行 |
+| 文档解析、专用检索/重排、评测或模型推理 | Python 独立服务，按实际依赖启用 | 提供明确的计算能力；不拥有 CoStage Task/Run、审批或平台记忆的权威状态 |
+| PostgreSQL、对象存储、LiteLLM、Langfuse 等基础组件 | 按各项目支持的方式部署 | 通过稳定接口复用，不纳入统一语言改写范围 |
+
+#### 共享契约与 Python 服务边界
+
+共享内容限于协议、schema 与纯数据转换。浏览器不能导入服务端权限策略、数据库访问或密钥处理模块。TypeScript 类型不替代运行时校验；对外事件、Connector 协议和 Python 服务接口均携带 schema_version，并在接收端校验与明确拒绝不支持的版本。Python 客户端按同一契约生成或校验，不另建一套手工维护的字段定义。
+
+只有明确依赖 Python 生态、需要独立算力或批处理时才增加相应服务，不把整个 Agent 循环再做一份 Python 实现。同步能力默认使用内部 HTTP/JSON，长任务使用持久 job_id 和可查询状态；输入输出引用不可变资料 revision 或对象存储制品，传递租户、调用身份、授权范围、run_id、operation_id、截止时间和 trace context，不依赖 TypeScript/Python 对象序列化。
+
+Python 服务负责自身计算作业及派生缓存，结果由 TS 业务层验证后提交平台记忆、产物和 Run 状态；它不能直接修改业务库或代替 Coordinator 作出授权与恢复决定。服务身份按租户与资料范围授权，沿用原文的内容权限、保留和删除规则。相同 operation_id 的重复请求复用作业或核对结果；超时不等于作业取消，重试与取消需查询原 job，晚到结果仍检查当前 Run、租约和授权。
+
+API、Worker、Connector Gateway 与设备 Connector 保持独立进程边界。Node.js 的事件循环承担 I/O 与编排，CPU 密集工作放入受控计算进程或独立服务。Connector 的分发需固定兼容的 Node.js 运行环境及依赖，不能假定用户安装 Codex 或 dsh 就已有可复用的 Node.js。Python 服务各自固定运行环境和依赖，按职责独立扩缩容。
 
 | 单 Agent 方案 | 控制权与收益 | 维护代价 | 本版选择 |
 | --- | --- | --- | --- |
@@ -177,7 +216,7 @@ Context Builder 负责资料检索、权限过滤、记忆读取、排序和输�
 
 ### LangGraph 只持有执行进度
 
-选择 Functional API：一个 entrypoint 表达自研循环，阶段函数包装为 LGStep；等待通过 interrupt 暂停。循环逻辑不委托给预设 Agent，也不把整个循环包成一个只有末尾 checkpoint 的大步骤。小函数可继续埋点，但只有需要恢复、复用结果或隔离副作用的阶段才成为 LGStep。
+选择 LangGraph JS Functional API：一个 entrypoint 表达自研循环，阶段函数包装为 LGStep；等待通过 interrupt 暂停。循环逻辑不委托给预设 Agent，也不把整个循环包成一个只有末尾 checkpoint 的大步骤。小函数可继续埋点，但只有需要恢复、复用结果或隔离副作用的阶段才成为 LGStep。
 
 框架 checkpoint 保存 continuation 所需数据、已完成阶段结果和等待位置。阶段结果优先保存不可变 ID、revision、digest 和小型控制值，正文留在业务存储或对象存储。Context、Memory、权限和房间历史不在框架内再维护一份权威副本。
 
@@ -198,7 +237,9 @@ Context Builder 负责资料检索、权限过滤、记忆读取、排序和输�
 
 两边不假设跨 schema 自动原子提交。带业务效果的阶段先提交业务记录，返回引用后才由框架保存阶段结果。若 checkpoint 落后，重新进入阶段时按稳定 ID 取回已提交结果；若 checkpoint 已引用的业务记录因异常不可用，则阻断并修复，不凭空重新执行。首次执行也先保存 RunSpec 与作业，框架尚无 checkpoint 时可以据此重新启动。
 
-使用 PostgreSQL checkpointer，默认选择同步持久化，并在动作派发与等待登记处明确确认所需结果已持久保存。同步保存增加存储开销；它减少恢复窗口，外部操作的去重仍依赖业务账本。[持久化模式](https://docs.langchain.com/oss/python/langgraph/checkpointers#durability-modes)
+使用 LangGraph JS 的 PostgreSQL checkpointer（@langchain/langgraph-checkpoint-postgres），默认选择 durability 为 sync。JS 官方文档说明该模式会在本次运行返回前等待未完成的 checkpoint 写入，中间步骤仍可能先于写入完成而继续；因此不能把 sync 等同于逐阶段落盘屏障。Runtime Adapter 以实际 checkpointer 持久写入回执确认 checkpoint 和 interrupt，再将等待标为 ready；动作派发前仍先持久保存业务 intent，阶段丢失后按稳定操作 ID 和账本对账。[持久化模式](https://docs.langchain.com/oss/javascript/langgraph/checkpointers#durability-modes)
+
+JS 运行库、checkpointer、Node.js 与状态 schema 分别固定兼容版本；附录记录的 Python LangGraph 版本仅为历史调研事实，不作为 JS 依赖版本。版本验收需确认实际写入回执、等待 ready 与租约 fencing 契约，不依赖配置项名称推断恢复保证。
 
 ## Agent 版本管理
 
@@ -656,13 +697,13 @@ managed Worker 通过 PostgreSQL 短事务领取 RunJob，获得租约和递增 
 
 ### managed 框架重放与业务恢复
 
-Functional API 从 entrypoint 起点重放控制流，并复用已持久化的 LGStep 结果；它不会保存 Python 的程序计数器，也不从任意中断行原地继续。自研循环因此只在持久阶段内读取可变输入、调用模型、提交业务变更或产生影响分支的随机值。阶段调用顺序由固定代码及已有阶段结果决定；不能在重放期间用最新房间历史改变已经走过的分支。[恢复语义](https://docs.langchain.com/oss/python/langgraph/functional-api#determinism)
+Functional API 从 entrypoint 起点重放控制流，并复用已持久化的 LGStep 结果；它不会保存 JavaScript 的调用栈、Promise 或程序计数器，也不从任意中断行原地继续。自研循环因此只在持久阶段内读取可变输入、调用模型、提交业务变更或产生影响分支的随机值。阶段调用顺序由固定代码及已有阶段结果决定；不能在重放期间用最新房间历史改变已经走过的分支。[恢复语义](https://docs.langchain.com/oss/javascript/langgraph/functional-api#determinism)
 
 每次真正派发新模型或工具动作前，都检查当前租约、取消、权限与预算。历史输入和旧确认只记录当时事实，不充当本次执行授权。该实时检查不依赖框架缓存结果。
 
 阶段使用稳定 step_id；模型调用、委派、工具写入、记忆及产物提交分别绑定稳定的业务操作 ID，独立于 Worker attempt。ID 的首次生成与输入先落业务库，重放或接管时取回原值。执行产生的业务记录先提交，再返回引用给 LangGraph；未完成阶段可能再次进入，但先查账本，不直接重做外部动作。
 
-对并行工具逐个保存结果和操作状态，不将整批包装成一个只能整体重试的步骤。模型发起但尚未派发的工具标记为 not_started；已派发且结果不明的标记为 unknown，阻断依赖其效果的后续动作。LangGraph 提供的 checkpoint 不能替代这些业务判断。[重试边界与副作用](https://docs.langchain.com/oss/python/langgraph/fault-tolerance)
+对并行工具逐个保存结果和操作状态，不将整批包装成一个只能整体重试的步骤。模型发起但尚未派发的工具标记为 not_started；已派发且结果不明的标记为 unknown，阻断依赖其效果的后续动作。LangGraph 提供的 checkpoint 不能替代这些业务判断。[重试边界与副作用](https://docs.langchain.com/oss/javascript/langgraph/fault-tolerance)
 
 需要确认的工具分为准备动作、等待批准、获批后执行三个阶段。它们共享 operation_id，执行阶段再次授权，但不复用“等待批准”的阶段结果作为执行结果；拒绝、过期和取消形成明确业务结果。工具 outcome 为 unknown 时，循环进入持久 blocked 等待，经对账解除后再继续。
 
@@ -705,7 +746,7 @@ native 不使用上述 checkpoint 恢复，按原生证据处理：
 
 等待状态、ResumeEnvelope、取消和截止时间均在业务库持久保存。重启后扫描过期租约、等待桥接间隙、未确认恢复和 Outbox；LangGraph 本身不承担跨 Worker 队列、租户公平调度或分布式租约。对账器只协调这两套记录，不解释 Agent 策略。 native 另扫描设备连接、命令回执、事件游标和取消确认，恢复由 Native Adapter 与原设备协议完成，不创建 LangGraph checkpoint 来代替。
 
-轨迹回放只查看历史请求、事件和工具结果；故障恢复沿同一 Run 和 RuntimeBinding 继续。为了比较新模型或策略而重新执行时，创建关联的新 Run，默认使用录制或模拟工具，禁用外部写入。LangGraph 的历史 checkpoint 重放可能重新执行后续动作，因此不能作为生产环境“安全预览”的入口。[checkpoint 重放](https://docs.langchain.com/oss/python/langgraph/checkpointers#replay)
+轨迹回放只查看历史请求、事件和工具结果；故障恢复沿同一 Run 和 RuntimeBinding 继续。为了比较新模型或策略而重新执行时，创建关联的新 Run，默认使用录制或模拟工具，禁用外部写入。LangGraph 的历史 checkpoint 重放可能重新执行后续动作，因此不能作为生产环境“安全预览”的入口。[checkpoint 重放](https://docs.langchain.com/oss/javascript/langgraph/checkpointers#replay)
 
 原生会话的 fork/resume 也不等于无副作用回放。native 新运行的对比必须重新确认资源与授权；其内部轨迹不足时，只比较平台可观察结果与已知成本，不生成虚构的逐步回放。
 
@@ -759,9 +800,9 @@ native 候选发布同时固定或观测原生版本、profile、原生资源快
 
 ### 首版保持可拆分的单体
 
-API 与 Worker 使用同一模块化业务代码库，可分别部署和扩缩容；工具执行器位于独立隔离环境。基础存储为 PostgreSQL/pgvector 与对象存储，模型网关采用 LiteLLM，观测接入 Langfuse 与 OpenTelemetry。Redis 仅在需要跨实例通知和短期缓存时启用。自托管观测平台的数据库与分析存储单独计入资源预算。
+API 与 Worker 使用同一套模块化 TypeScript 业务代码库，运行在 Node.js，可分别部署和扩缩容；Connector Gateway 可独立部署，工具执行器位于独立隔离环境。按需启用的 Python 能力服务独立部署，不承担业务调度或 managed Agent 的恢复。基础存储为 PostgreSQL/pgvector 与对象存储，模型网关采用独立 LiteLLM，观测接入 Langfuse 与 OpenTelemetry。Redis 仅在需要跨实例通知和短期缓存时启用。自托管观测平台的数据库与分析存储单独计入资源预算。
 
-增加 Connector Gateway 维护设备 WSS 和命令/事件通道，可作为同一服务的独立部署角色；用户设备运行 Local Connector 和已安装的原生 Agent，设备侧不部署云端数据库。原生 SDK 需要其他语言时通过设备侧协议进程集成，不因此改变平台主技术栈。
+Connector Gateway 使用 Node.js/TypeScript 维护设备 WSS 和命令/事件通道；用户设备上的 Local Connector 与原生协议适配器也使用 TypeScript，驱动已安装的原生 Agent。设备侧不部署云端数据库。只有原生能力确实要求其他语言时才引入隔离的协议进程，该进程不获得平台 Task/Run 的控制权。
 
 生产 API 无状态，Worker 按队列积压和模型配额扩缩容。先在单区域运行，PostgreSQL 开启备份与时间点恢复；附件和发布制品使用对象存储版本及生命周期策略。试点目标 RPO 5 分钟、RTO 1 小时，需要以恢复演练验证。
 
@@ -808,6 +849,8 @@ native 按可获得的 usage、订阅/API 计费口径和估算分别展示；�
 | 关键选择 | 推荐与理由 |
 | --- | --- |
 | 使用边界 | 用户已确认邀请制、多团队独立空间；资源按 tenant 隔离 |
+| 主语言 | 用户已确认 TypeScript 主栈；Python 按需独立服务，TS 业务层拥有任务、授权和平台记忆事实 |
+| 技术基础 | React + TypeScript、Node.js、默认 Fastify、LangGraph JS、PostgreSQL/pgvector；兼容版本分别锁定 |
 | 执行后端 | managed 使用自研循环与策略 + LangGraph；native 接入 Codex、Claude Code、dsh 自有执行循环与会话 |
 | 统一边界 | 共用房间、Task/Run、授权、发布与事件；模型网关不代理原生循环，同一 Run 不跨后端恢复 |
 | 群聊行为 | 普通消息共享，显式 @ 执行；原生跨 Agent 委派通过获准协作桥，不解析文本伪造调用 |
@@ -860,6 +903,10 @@ native 按可获得的 usage、订阅/API 计费口径和估算分别展示；�
 | 同房间不同成员依次调用原生实例 | requester、凭据主体、资料授权或受众改变即建立新会话及可隔离记忆范围 |
 | native 父 turn 先结束，必需子 Run 后完成 | 同一父 Run 等待，以持久 wait_generation 和新 command_id 幂等续接，不提前判成功 |
 | 取消 Task 但原生后代未确认静止 | Task 显示取消中并保持 blocked，禁止重做，直到全部需停止执行已核实 |
+| TypeScript 与 Python 交换新旧版本消息 | 按 schema_version 校验；不兼容时显式拒绝，不静默丢字段 |
+| Python 作业超时后重试、取消或晚到结果 | 查询同一 operation_id/job_id，业务状态仅由 TS 控制面提交，不重复计算副作用或越权发布 |
+| 设备没有兼容 Node.js 环境 | Connector 提供固定运行环境或明确安装前置条件，不推断原生 Agent 的依赖可直接复用 |
+| LangGraph JS sync 模式下中间步骤早于 checkpoint 写完 | 等待 ready 依实际持久回执；崩溃后按业务账本对账，不把配置值当作逐阶段屏障 |
 
 ### 推荐方案的代价与剩余选择
 
@@ -867,7 +914,7 @@ native 按可获得的 usage、订阅/API 计费口径和估算分别展示；�
 
 平台维护统一业务控制面，各后端保留唯一的执行与恢复所有者。当前不自研 checkpoint 引擎，也不把原生 Agent 包成会被 LangGraph 自动重放的大步骤。原生接入的默认个人模式保留易用性；要求自动协作、秘密隔离或完整成本控制时，选择能力已验证的受控 profile，或者使用 managed 路径。
 
-实现者可在上述边界内选择 ORM、页面组件、索引与缓存策略。运行时必须验证的假设是：固定调用顺序下 Functional API 的恢复契约、PostgreSQL checkpointer 与业务账本的对账、租约失效后的写入隔离，以及目标负载下同步持久化的开销。新增原生接入需验证 installed binary 与 SDK 兼容、可恢复会话、原生审批与取消、工作目录隔离及日志失配。能力不满足时按前述降级或拒绝启用，不改变权限和恢复所有者。它们已有对应验收条件。本设计不展开实施任务、开发排期或代码。
+实现者可在上述边界内选择 ORM、页面组件、索引与缓存策略。运行时必须验证的假设是：固定版本的 LangGraph JS 在调用顺序不变时的恢复契约、JS PostgreSQL checkpointer 与业务账本的对账、租约失效后的写入隔离，以及目标负载下同步持久化的开销。新增原生接入需验证 已安装原生程序 与 SDK 兼容、可恢复会话、原生审批与取消、工作目录隔离及日志失配。能力不满足时按前述降级或拒绝启用，不改变权限和恢复所有者。跨语言服务另验证 schema 兼容、幂等作业、取消确认、晚到结果授权，以及 Connector 分发环境的兼容性。它们已有对应验收条件。本设计不展开实施任务、开发排期或代码。
 
 ## GitHub 调研附录
 
@@ -882,11 +929,11 @@ native 按可获得的 usage、订阅/API 计费口径和估算分别展示；�
 | [langchain](https://github.com/langchain-ai/langchain) | 149,124 | 模型、工具集成及 Agent 抽象 | 按需使用适配器，群聊领域模型不依赖它 |
 | [autogen](https://github.com/microsoft/autogen) | 61,732 | 事件驱动、多 Agent 对话的早期代表 | 仅作架构参考，官方 README 已宣布停止维护 |
 | [crewAI](https://github.com/crewAIInc/crewAI) | 60,571 | 围绕角色、任务、Crew 和 Flow 组织协作 | 适合办公任务模板，持续群聊规则仍需自建 |
-| [langgraph](https://github.com/langchain-ai/langgraph) | 44,566 | 显式图状态、checkpoint、暂停恢复 | 持久执行依赖；循环与策略自研 |
+| [langgraph](https://github.com/langchain-ai/langgraph) | 44,566 | 显式图状态、checkpoint、暂停恢复 | 使用 LangGraph JS 持久执行；循环与策略自研 |
 | [agno](https://github.com/agno-agi/agno) | 43,082 | Agent、Team、Workflow 与 AgentOS 服务 | 完整平台备选，验证其状态与权限模型能否承接群聊 |
 | [agentscope](https://github.com/agentscope-ai/agentscope) | 35,506 | 多模型、Agent Team、MCP、Skills 与 Agent Service | 重点备选，尤其适合研究多 Agent 服务化 |
 | [openai-agents-python](https://github.com/openai/openai-agents-python) | 30,530 | 轻量 Agent 循环、工具、handoff 与 tracing | 适合独立 Agent 适配器；可接其他供应商模型 |
-| [mastra](https://github.com/mastra-ai/mastra) | 29,382 | TypeScript Agent、工作流、记忆和服务集成 | 团队若以 TypeScript 为主，优先替代 Python 技术栈 |
+| [mastra](https://github.com/mastra-ai/mastra) | 29,382 | TypeScript Agent、工作流、记忆和服务集成 | 同语言完整框架备选；当前保留自研 Harness + LangGraph JS 的职责划分 |
 | [adk-python](https://github.com/google/adk-python) | 22,125 | 模块化 Agent、工作流、工具与评测 | Google 生态较重时优先评估 |
 | [pydantic-ai](https://github.com/pydantic/pydantic-ai) | 21,057 | 类型化输入输出、模型适配、Harness 与持久执行集成 | 适合强结构化任务，作为 LangGraph 的替代候选 |
 | [agent-framework](https://github.com/microsoft/agent-framework) | 14,562 | Python/.NET、多种协作模式、checkpoint 与 OTel | .NET 团队的首选候选 |
@@ -934,7 +981,7 @@ Langfuse 已增加 Skills 版本与标签管理，README 将其标为 beta。它
 
 | 项目 | 已核对的版本或状态 | 对选型的影响 |
 | --- | --- | --- |
-| LangGraph | [核心 1.2.20，2026-11-05 UTC](https://github.com/langchain-ai/langgraph/releases/tag/1.2.20) | 不能将同仓库的 sdk、cli tag 当成核心库版本 |
+| LangGraph Python | [核心 1.2.20，2026-11-05 UTC](https://github.com/langchain-ai/langgraph/releases/tag/1.2.20) | 2026-11-07 的 Python 核心调研记录；不作为 LangGraph JS 的版本，sdk、cli tag 也不能混用 |
 | AgentScope | [v2.0.11，2026-10-27 UTC](https://github.com/agentscope-ai/agentscope/releases/tag/v2.0.11) | v2 已有 Agent Service；latest 文档当前跳转到 2.0.12dev，实施以固定 tag 为准 |
 | Microsoft Agent Framework | [Python 1.24.0，2026-10-30 UTC](https://github.com/microsoft/agent-framework/releases/tag/python-1.24.0) | 作为 AutoGen 后继项目参与当前选型 |
 | Mastra | [core 1.82.0，2026-11-04 UTC](https://github.com/mastra-ai/mastra/releases/tag/%40mastra/core%401.82.0) | TypeScript 路线的主要候选 |

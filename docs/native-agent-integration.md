@@ -1,6 +1,6 @@
 # 原生 Agent 接入说明
 
-设计版本：v4。核对日期：2026-11-07，北京时间。本文补充 [系统设计](system-design.md) 中的原生 Agent 接入契约，描述目标行为与接口依据；当前仓库处于设计阶段。
+设计版本：v5。更新日期：2026-11-10；原生接口核对日期：2026-11-07，北京时间。本文补充 [系统设计](system-design.md) 中的原生 Agent 接入契约，描述目标行为与接口依据；当前仓库处于设计阶段。
 
 ## 两个入口，保留各自的执行方式
 
@@ -10,6 +10,14 @@
 | 已有 Agent，native | 已安装的 Codex、Claude Code、dsh，设备和获准配置范围 | 原生 Agent；由其协议负责会话和恢复 | 延用个人工作环境、原生能力和现有资源，通过群聊发起任务 |
 
 本地模型 API 与本地 Agent 是两个对象。Ollama/vLLM 提供推理服务时仍走 managed；Codex/dsh 即便使用本地模型，仍是 native。平台不把原生 Agent 的输出再塞进一套外层 Agent 循环来替它决定工具调用。
+
+## 实现语言与集成边界
+
+Local Connector、Connector Gateway 与原生 Agent 适配器采用 TypeScript，运行在固定兼容版本的 Node.js。Codex 通过 App Server 协议接入，Claude Code 和 dsh 优先使用兼容的 TypeScript SDK；原生程序保留自身实现语言、配置、工具与持久存储。
+
+平台的 managed Harness、Coordinator 与 LangGraph JS 同样采用 TypeScript。跨浏览器、云端、设备和 Python 服务的消息使用版本化 JSON Schema / OpenAPI 契约，并进行运行时校验。原生 SDK 的消息先在适配器内转换，不将供应商内部类型直接作为平台公共协议。
+
+Python 按需用于独立解析、检索、评测或推理服务，不复制原生适配层或 managed 循环，不持有 Task/Run、审批和平台记忆的权威状态。服务结果由 TS 业务层验权后接纳。Connector 分发明确携带运行环境或声明 Node.js 安装要求，不假设用户的原生 Agent 安装已提供兼容环境。完整选型理由与模块分配见 [系统设计的主语言与配套技术](system-design.md#主语言与配套技术)。
 
 ## “我本地有 Codex 和 dsh”的使用过程
 
@@ -59,7 +67,7 @@ RuntimeCapabilities 以设备探测结果为准，带探测时间、版本、配
 | 状态 | 权威保存方 | CoStage 保存什么 |
 | --- | --- | --- |
 | 房间、成员、Task/Run、委派、输出受众 | 平台业务库 | 完整业务事实、授权、发布和审计 |
-| managed 执行阶段 | LangGraph + 业务操作账本 | RuntimeBinding、checkpoint 引用与稳定业务操作 ID |
+| managed 执行阶段 | LangGraph JS + TS 业务层操作账本 | RuntimeBinding、checkpoint 引用与稳定业务操作 ID |
 | native 上下文、压缩、原生记忆和会话 | 原生运行时及其本地持久存储 | session/turn 关联、能力与资源快照；可得事件引用 |
 | 命令是否已派发、原生接收回执 | 设备侧 Connector 日志与原生证据 | command_id、digest、投递状态和回执镜像 |
 | 原生外部写入效果 | 原生回执或目标系统事实 | 可取得的结果与未决状态；不伪造平台 ToolInvocation 的完整账本 |
@@ -91,3 +99,4 @@ managed 父 Run 可持久等待 native 子 Run，之后由 LangGraph 恢复。na
 跨任务委派还检查原生会话和工作目录的占用依赖，拒绝导致等待环路的请求。
 
 同一个 Run 不在两个后端之间迁移。将任务交给另一类 Agent 是显式创建子 Run；在故障后重新执行则创建关联的新 Run，并重新确认原执行状态和副作用。
+
